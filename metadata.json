@@ -1,0 +1,6 @@
+{
+  "name": "Geospatial KMZ Viewer",
+  "description": "An interactive web-based workbench to upload, parse, and visualize KML and KMZ geospatial files instantly on an interactive map.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

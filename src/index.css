@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-high-bg: #0B0C10;
+  --color-high-border: #1F2833;
+  --color-high-card: #151A22;
+  --color-high-accent: #66FCF1;
+  --color-high-teal: #45A29E;
+  --color-high-text: #C5C6C7;
+  --color-high-darker: #07080B;
+}
+
+/* Global styles and custom leaflet overrides */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #0b0c10 !important;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dark mode overrides for Leaflet */
+.leaflet-bar {
+  border: 1px solid #1F2833 !important;
+  box-shadow: none !important;
+}
+
+.leaflet-bar a {
+  background-color: #0B0C10 !important;
+  color: #66FCF1 !important;
+  border-bottom: 1px solid #1F2833 !important;
+  transition: all 0.2s;
+}
+
+.leaflet-bar a:hover {
+  background-color: #1F2833 !important;
+  color: #66FCF1 !important;
+}
+
+.leaflet-bar a.leaflet-disabled {
+  background-color: #0B0C10 !important;
+  color: #45A29E !important;
+  opacity: 0.5;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #0B0C10 !important;
+  color: #C5C6C7 !important;
+  border: 1px solid #1F2833 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background: #0B0C10 !important;
+  border: 1px solid #1F2833 !important;
+}
+
+/* Custom scrollbars for a clean workspace feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07080B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1F2833;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #45A29E;
+}
+
+/* Animations for layers panel and feature highlights */
+@keyframes pulse-highlight {
+  0%, 100% {
+    stroke-dasharray: 4,4;
+    stroke-opacity: 0.8;
+  }
+  50% {
+    stroke-dasharray: 8,8;
+    stroke-opacity: 1;
+  }
+}
+
+.feature-pulse-active {
+  animation: pulse-highlight 2s infinite ease-in-out;
+}
+
