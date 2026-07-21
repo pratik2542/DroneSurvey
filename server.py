@@ -6,6 +6,23 @@ import json
 import requests
 import threading
 
+# --- Google Drive Service Account Setup ---
+GDRIVE_SA_CREDS = None
+try:
+    sa_key_str = os.environ.get('GDRIVE_SA_KEY')
+    if sa_key_str:
+        from google.oauth2 import service_account
+        sa_info = json.loads(sa_key_str)
+        GDRIVE_SA_CREDS = service_account.Credentials.from_service_account_info(
+            sa_info,
+            scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        print("Google Drive service account credentials loaded successfully.")
+    else:
+        print("GDRIVE_SA_KEY env var not set — will fall back to gdown for downloads.")
+except Exception as e:
+    print(f"Failed to load Google Drive service account credentials: {e}")
+
 # Try to import Firebase Admin
 HAS_FIREBASE = False
 try:
@@ -127,13 +144,30 @@ def get_gdrive_file_id(url):
 
 # Helper to stream-download file from Google Drive
 def download_gdrive_file(file_id, destination_path):
-    import gdown
-    url = f"https://drive.google.com/uc?id={file_id}"
-    print(f"Downloading from Google Drive file_id={file_id} ...")
-    gdown.download(url, destination_path, quiet=False)
+    if GDRIVE_SA_CREDS:
+        # --- Use Google Drive API (service account) — no rate limits ---
+        print(f"Downloading via Drive API (service account) file_id={file_id} ...")
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseDownload
+        import io
+        service = build('drive', 'v3', credentials=GDRIVE_SA_CREDS)
+        request_obj = service.files().get_media(fileId=file_id)
+        with open(destination_path, 'wb') as fh:
+            downloader = MediaIoBaseDownload(fh, request_obj, chunksize=5 * 1024 * 1024)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                if status:
+                    print(f"  Download progress: {int(status.progress() * 100)}%")
+    else:
+        # --- Fallback: gdown (public download, may hit quota) ---
+        print(f"Downloading via gdown (no SA creds) file_id={file_id} ...")
+        import gdown
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, destination_path, quiet=False)
 
     if not os.path.exists(destination_path):
-        raise Exception("Download failed: file not found after gdown.")
+        raise Exception("Download failed: file not found after download.")
 
     file_size = os.path.getsize(destination_path)
     if file_size < 1024:
