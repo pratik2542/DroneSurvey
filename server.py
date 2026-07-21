@@ -127,60 +127,23 @@ def get_gdrive_file_id(url):
 
 # Helper to stream-download file from Google Drive
 def download_gdrive_file(file_id, destination_path):
-    import re
-    session = requests.Session()
+    import gdown
+    url = f"https://drive.google.com/uc?id={file_id}"
+    print(f"Downloading from Google Drive file_id={file_id} ...")
+    gdown.download(url, destination_path, quiet=False, fuzzy=True)
 
-    # Try the modern usercontent endpoint first (bypasses virus scan confirmation)
-    direct_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&uuid={file_id}"
-    response = session.get(direct_url, stream=True, timeout=60)
+    if not os.path.exists(destination_path):
+        raise Exception("Download failed: file not found after gdown.")
 
-    # Fallback: old endpoint
-    if response.status_code != 200 or 'text/html' in response.headers.get('Content-Type', ''):
-        print(f"Direct download failed or returned HTML, trying fallback...")
-        download_url = "https://docs.google.com/uc?export=download"
-        response = session.get(download_url, params={'id': file_id}, stream=True, timeout=60)
-
-        # If we got a confirmation/warning page, parse and re-submit
-        content_type = response.headers.get('Content-Type', '')
-        if 'text/html' in content_type:
-            html = response.text
-            # Try to find confirm token
-            confirm_match = re.search(r'confirm=([0-9A-Za-z_\-]+)', html)
-            confirm_token = confirm_match.group(1) if confirm_match else 't'
-
-            # Try usercontent with confirm token
-            response = session.get(
-                "https://drive.usercontent.google.com/download",
-                params={'id': file_id, 'export': 'download', 'confirm': confirm_token},
-                stream=True,
-                timeout=60
-            )
-
-    if response.status_code != 200:
-        raise Exception(f"Google Drive download failed (Status {response.status_code})")
-
-    # Safety check: make sure we got binary data, not an HTML page
-    content_type = response.headers.get('Content-Type', '')
-    if 'text/html' in content_type:
-        raise Exception(
-            "Google Drive returned an HTML page instead of the file. "
-            "Make sure the file sharing is set to 'Anyone with the link' and the link is correct."
-        )
-
-    with open(destination_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                f.write(chunk)
-
-    # Double-check: if file is tiny it's probably an error HTML page
     file_size = os.path.getsize(destination_path)
-    if file_size < 1024:  # Less than 1KB is definitely not a .tif
+    if file_size < 1024:
         with open(destination_path, 'r', errors='ignore') as f:
-            content_preview = f.read(200)
+            preview = f.read(200)
         raise Exception(
             f"Downloaded file is too small ({file_size} bytes) — likely an error page. "
-            f"Preview: {content_preview[:100]}"
+            f"Preview: {preview[:100]}"
         )
+    print(f"Download complete: {file_size / (1024*1024):.1f} MB")
 
 # Helper to get raster bounds using pure rasterio (no client locks)
 def get_raster_bounds(filepath):
