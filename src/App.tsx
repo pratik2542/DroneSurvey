@@ -131,6 +131,26 @@ const SAMPLE_KML = `<?xml version="1.0" encoding="UTF-8"?>
   </Document>
 </kml>`;
 
+const getBackendUrl = (path: string): string => {
+  const backendHost = import.meta.env.VITE_BACKEND_URL || '';
+  if (backendHost) {
+    const cleanHost = backendHost.endsWith('/') ? backendHost.slice(0, -1) : backendHost;
+    return `${cleanHost}${path}`;
+  }
+  return `/tile-server-proxy${path}`;
+};
+
+const getBackendHeaders = (headers: Record<string, string> = {}): Record<string, string> => {
+  const backendHost = import.meta.env.VITE_BACKEND_URL || '';
+  if (!backendHost) {
+    return {
+      ...headers,
+      'x-target-host': 'http://localhost:8000'
+    };
+  }
+  return headers;
+};
+
 export default function App() {
   const [layers, setLayers] = useState<KmlLayer[]>([]);
   const [visibleLayerIds, setVisibleLayerIds] = useState<string[]>([]);
@@ -174,10 +194,8 @@ export default function App() {
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
-        const response = await fetch('/tile-server-proxy/api/surveys', {
-          headers: {
-            'x-target-host': 'http://localhost:8000'
-          }
+        const response = await fetch(getBackendUrl('/api/surveys'), {
+          headers: getBackendHeaders()
         });
         if (response.ok) {
           const data = await response.json();
@@ -217,10 +235,8 @@ export default function App() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch('/tile-server-proxy/api/surveys', {
-          headers: {
-            'x-target-host': 'http://localhost:8000'
-          }
+        const response = await fetch(getBackendUrl('/api/surveys'), {
+          headers: getBackendHeaders()
         });
         if (response.ok) {
           const data = await response.json();
@@ -242,12 +258,11 @@ export default function App() {
     setIsProcessing(true);
     setErrorMsg(null);
     try {
-      const response = await fetch('/tile-server-proxy/api/process-survey', {
+      const response = await fetch(getBackendUrl('/api/process-survey'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-target-host': 'http://localhost:8000'
-        },
+        headers: getBackendHeaders({
+          'Content-Type': 'application/json'
+        }),
         body: JSON.stringify({
           name: adminName.trim(),
           url: adminUrl.trim(),
@@ -282,11 +297,9 @@ export default function App() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const response = await fetch(`/tile-server-proxy/api/surveys/${id}`, {
+      const response = await fetch(getBackendUrl(`/api/surveys/${id}`), {
         method: 'DELETE',
-        headers: {
-          'x-target-host': 'http://localhost:8000'
-        }
+        headers: getBackendHeaders()
       });
       
       if (!response.ok) {
@@ -424,10 +437,8 @@ export default function App() {
     setErrorMsg(null);
     try {
       // 1. Check if backend cache is ready
-      const cacheResponse = await fetch(`/tile-server-proxy/api/surveys/cache-status/${survey.id}`, {
-        headers: {
-          'x-target-host': 'http://localhost:8000'
-        }
+      const cacheResponse = await fetch(getBackendUrl(`/api/surveys/cache-status/${survey.id}`), {
+        headers: getBackendHeaders()
       });
       
       if (!cacheResponse.ok) {
@@ -445,10 +456,8 @@ export default function App() {
           await new Promise(resolve => setTimeout(resolve, 3000));
           pollCount++;
           
-          const checkResponse = await fetch(`/tile-server-proxy/api/surveys/cache-status/${survey.id}`, {
-            headers: {
-              'x-target-host': 'http://localhost:8000'
-            }
+          const checkResponse = await fetch(getBackendUrl(`/api/surveys/cache-status/${survey.id}`), {
+            headers: getBackendHeaders()
           });
           
           if (checkResponse.ok) {
@@ -475,7 +484,7 @@ export default function App() {
           features: [],
           visible: true,
           color: '#8B5CF6',
-          tileUrl: survey.url,
+          tileUrl: getBackendUrl(survey.url),
           bounds: survey.bounds
         };
         
@@ -559,11 +568,9 @@ export default function App() {
     let boundsToUse = parsedBounds;
     if (!boundsToUse && host && filename) {
       try {
-        const boundsUrl = `/tile-server-proxy/api/bounds?filename=${encodeURIComponent(filename)}`;
+        const boundsUrl = getBackendUrl(`/api/bounds?filename=${encodeURIComponent(filename)}`);
         const response = await fetch(boundsUrl, {
-          headers: {
-            'x-target-host': host
-          }
+          headers: getBackendHeaders(host ? { 'x-target-host': host } : {})
         });
         if (response.ok) {
           const data = await response.json();
@@ -687,12 +694,10 @@ export default function App() {
           const formData = new FormData();
           formData.append('file', file);
 
-          const response = await fetch('/tile-server-proxy/api/upload-tif', {
+           const response = await fetch(getBackendUrl('/api/upload-tif'), {
             method: 'POST',
             body: formData,
-            headers: {
-              'x-target-host': 'http://localhost:8000'
-            }
+            headers: getBackendHeaders()
           });
 
           if (!response.ok) {
@@ -701,16 +706,14 @@ export default function App() {
           }
 
           const data = await response.json();
-          const fullTileUrl = `/tile-server-proxy${data.tileUrl}`;
+          const fullTileUrl = getBackendUrl(data.tileUrl);
 
           // Auto-fetch bounds from localtileserver proxy
           let boundsToUse: [number, number, number, number] | undefined;
           try {
-            const boundsUrl = `/tile-server-proxy/api/bounds?filename=${encodeURIComponent(data.filepath)}`;
+            const boundsUrl = getBackendUrl(`/api/bounds?filename=${encodeURIComponent(data.filepath)}`);
             const boundsResponse = await fetch(boundsUrl, {
-              headers: {
-                'x-target-host': 'http://localhost:8000'
-              }
+              headers: getBackendHeaders()
             });
             if (boundsResponse.ok) {
               const boundsData = await boundsResponse.json();

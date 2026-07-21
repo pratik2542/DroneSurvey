@@ -1,5 +1,10 @@
 FROM python:3.11-slim
 
+# Install lightweight runtime libraries required by pre-compiled wheels (like rasterio)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy requirements and install (pip will use pre-compiled wheels)
