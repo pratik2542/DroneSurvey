@@ -10,7 +10,7 @@ import threading
 HAS_FIREBASE = False
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore, storage
+    from firebase_admin import credentials, firestore
     
     cred = None
     env_creds = os.environ.get('FIREBASE_CREDENTIALS')
@@ -31,14 +31,10 @@ try:
         print("Loaded Firebase credentials from firebase-key.json file.")
         
     if cred:
-        bucket_domain = os.environ.get('FIREBASE_BUCKET', 'dronesurvey-app.appspot.com')
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': bucket_domain
-        })
+        firebase_admin.initialize_app(cred)
         db = firestore.client()
-        bucket = storage.bucket()
         HAS_FIREBASE = True
-        print(f"Firebase Admin successfully initialized on bucket: {bucket_domain}")
+        print("Firebase Admin successfully initialized (Firestore only).")
     else:
         print("Firebase credentials not found (no env var or local file). Bypassing Firebase.")
 except Exception as e:
@@ -367,15 +363,19 @@ def delete_survey(id):
     if request.method == 'OPTIONS':
         return '', 200
         
+    # 1. Always clean up local cached files to free up disk space
+    try:
+        tif_path = os.path.join(UPLOAD_FOLDER, f"{id}.tif")
+        if os.path.exists(tif_path): os.remove(tif_path)
+        kmz_path = os.path.join(UPLOAD_FOLDER, f"{id}.kmz")
+        if os.path.exists(kmz_path): os.remove(kmz_path)
+    except Exception as cleanup_err:
+        print(f"Local cache file deletion warning: {cleanup_err}")
+        
+    # 2. Delete database entry
     if HAS_FIREBASE:
         try:
             db.collection('surveys').document(id).delete()
-            try:
-                bucket.blob(f"rasters/{id}.tif").delete()
-            except Exception: pass
-            try:
-                bucket.blob(f"vectors/{id}.kmz").delete()
-            except Exception: pass
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -383,12 +383,6 @@ def delete_survey(id):
         local_db = load_local_db()
         updated_db = [s for s in local_db if s['id'] != id]
         save_local_db(updated_db)
-        try:
-            tif_path = os.path.join(UPLOAD_FOLDER, f"{id}.tif")
-            if os.path.exists(tif_path): os.remove(tif_path)
-            kmz_path = os.path.join(UPLOAD_FOLDER, f"{id}.kmz")
-            if os.path.exists(kmz_path): os.remove(kmz_path)
-        except Exception: pass
         return jsonify({'success': True})
 
 @app.route('/uploads/<path:filename>', methods=['GET'])
