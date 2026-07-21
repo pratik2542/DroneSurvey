@@ -1,25 +1,12 @@
 FROM python:3.11-slim
 
-# Install system dependencies for GDAL, Rasterio, and localtileserver
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    g++ \
-    gdal-bin \
-    libgdal-dev \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set GDAL environment variables so pip compiles rasterio correctly
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
-
 WORKDIR /app
 
-# Copy requirements and install
+# Copy requirements and install (pip will use pre-compiled wheels)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend files and database fallbacks
+# Copy backend files
 COPY server.py .
 
 # Create folders for temporary data processing
