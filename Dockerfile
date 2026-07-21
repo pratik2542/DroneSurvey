@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py .
 
 # Create folders for temporary data processing
-RUN mkdir -p temp uploads
+# chmod 777 is required for OpenShift: it runs containers as a random non-root UID,
+# so the dirs must be world-writable at build time.
+RUN mkdir -p temp uploads && chmod -R 777 temp uploads
 
 EXPOSE 8000
 
