@@ -1,5 +1,22 @@
 from flask import Flask, request, jsonify
-from localtileserver.web.blueprint import tileserver
+
+# Import localtileserver blueprint (path varies by version)
+_tileserver_blueprint = None
+try:
+    from localtileserver.web.blueprint import tileserver as _tileserver_blueprint
+except ImportError:
+    try:
+        from localtileserver.blueprint import tileserver as _tileserver_blueprint
+    except ImportError:
+        try:
+            from localtileserver import TileClient
+            from localtileserver.web import get_clean_filename_from_url
+            # Newer localtileserver exposes blueprint differently
+            import localtileserver
+            _tileserver_blueprint = getattr(localtileserver, 'tileserver', None)
+        except Exception as _lts_err:
+            print(f"Warning: localtileserver blueprint not found: {_lts_err}")
+            _tileserver_blueprint = None
 import os
 import uuid
 import json
@@ -42,8 +59,12 @@ except Exception as e:
 
 app = Flask(__name__)
 
-# Register localtileserver blueprint
-app.register_blueprint(tileserver)
+# Register localtileserver blueprint (if available)
+if _tileserver_blueprint is not None:
+    app.register_blueprint(_tileserver_blueprint)
+    print("localtileserver blueprint registered successfully.")
+else:
+    print("Warning: localtileserver blueprint not registered. Tile serving may be limited.")
 
 # Manual CORS setup to support dev/production calls from mobile/tablet
 @app.after_request
