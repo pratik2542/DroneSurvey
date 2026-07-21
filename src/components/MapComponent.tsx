@@ -9,10 +9,16 @@ interface MapComponentProps {
   onFeatureSelect: (feature: KmlFeature | null, layer: KmlLayer | null) => void;
   basemap: BasemapType;
   onCoordinatesChange: (lat: number, lng: number) => void;
+<<<<<<< HEAD
   zoomLayerRequest: { layerId: string; timestamp: number } | null;
 }
 
 const BASEMAP_OPTIONS: Record<Exclude<BasemapType, 'none'>, BasemapOption> = {
+=======
+}
+
+const BASEMAP_OPTIONS: Record<BasemapType, BasemapOption> = {
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   osm: {
     id: 'osm',
     name: 'OpenStreetMap',
@@ -45,6 +51,7 @@ const BASEMAP_OPTIONS: Record<Exclude<BasemapType, 'none'>, BasemapOption> = {
   },
 };
 
+<<<<<<< HEAD
 function getLayerFeaturesBounds(features: KmlFeature[]): L.LatLngBounds | null {
   let minLat = Infinity;
   let maxLat = -Infinity;
@@ -102,6 +109,8 @@ function getLayerFeaturesBounds(features: KmlFeature[]): L.LatLngBounds | null {
   return L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
 }
 
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 export default function MapComponent({
   layers,
   visibleLayerIds,
@@ -109,7 +118,10 @@ export default function MapComponent({
   onFeatureSelect,
   basemap,
   onCoordinatesChange,
+<<<<<<< HEAD
   zoomLayerRequest,
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 }: MapComponentProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -122,6 +134,7 @@ export default function MapComponent({
   // Keep track of Leaflet layer instances per feature to do highlight/popups
   const featureLayersRef = useRef<Record<string, L.Layer>>({});
   
+<<<<<<< HEAD
   // Keep track of the drawn color of each layer to optimize re-renders
   const drawnLayerColorsRef = useRef<Record<string, string>>({});
   
@@ -131,6 +144,11 @@ export default function MapComponent({
   // Keep track of layers we have already zoomed to, to prevent annoying jumps when toggling visibility
   const zoomedLayerIdsRef = useRef<Set<string>>(new Set());
 
+=======
+  // Highlight layer
+  const highlightLayerRef = useRef<L.FeatureGroup | null>(null);
+
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -140,7 +158,10 @@ export default function MapComponent({
       center: [20, 0],
       zoom: 2,
       zoomControl: false, // We'll add custom zoom control or place it in a corner
+<<<<<<< HEAD
       preferCanvas: true, // Render vectors using Canvas instead of SVG for high performance
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
     });
 
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -172,11 +193,14 @@ export default function MapComponent({
 
     if (tileLayerRef.current) {
       map.removeLayer(tileLayerRef.current);
+<<<<<<< HEAD
       tileLayerRef.current = null;
     }
 
     if (basemap === 'none') {
       return;
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
     }
 
     const option = BASEMAP_OPTIONS[basemap];
@@ -194,6 +218,7 @@ export default function MapComponent({
     const map = mapRef.current;
     if (!map) return;
 
+<<<<<<< HEAD
     // Clean up zoomedLayerIdsRef for deleted layers
     const currentLayerIds = new Set(layers.map(l => l.id));
     zoomedLayerIdsRef.current.forEach((id) => {
@@ -202,6 +227,8 @@ export default function MapComponent({
       }
     });
 
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
     // 1. Remove layers that are no longer in the list or are hidden
     Object.keys(leafletLayersRef.current).forEach((layerId) => {
       const isStillPresentAndVisible = 
@@ -210,7 +237,10 @@ export default function MapComponent({
       if (!isStillPresentAndVisible) {
         map.removeLayer(leafletLayersRef.current[layerId]);
         delete leafletLayersRef.current[layerId];
+<<<<<<< HEAD
         delete drawnLayerColorsRef.current[layerId];
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         
         // Clean up individual feature layers reference
         layers.find(l => l.id === layerId)?.features.forEach(f => {
@@ -226,6 +256,7 @@ export default function MapComponent({
       let layerGroup = leafletLayersRef.current[layer.id];
       const isNewLayer = !layerGroup;
 
+<<<<<<< HEAD
       // Handle custom tile layers
       if (layer.tileUrl) {
         if (isNewLayer) {
@@ -256,10 +287,13 @@ export default function MapComponent({
       const prevColor = drawnLayerColorsRef.current[layer.id];
       const colorChanged = prevColor && prevColor !== layer.color;
 
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
       if (isNewLayer) {
         layerGroup = L.featureGroup();
         leafletLayersRef.current[layer.id] = layerGroup;
         layerGroup.addTo(map);
+<<<<<<< HEAD
         drawnLayerColorsRef.current[layer.id] = layer.color;
       } else if (colorChanged) {
         // Optimization: In-place update of feature colors instead of full rebuild
@@ -298,6 +332,15 @@ export default function MapComponent({
       layer.features.forEach((feature, idx) => {
         if (idx % skipFactor !== 0) return;
 
+=======
+      } else {
+        // Clear existing features inside this group and rebuild to handle styled updates
+        layerGroup.clearLayers();
+      }
+
+      // Draw each feature in this layer
+      layer.features.forEach((feature) => {
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         let leafletLayer: L.Layer | null = null;
         
         // Fallback style using layer's assigned color
@@ -336,6 +379,7 @@ export default function MapComponent({
           leafletLayer = L.polyline(feature.coordinates, style);
         } else if (feature.geometryType === 'Polygon') {
           leafletLayer = L.polygon(feature.coordinates, style);
+<<<<<<< HEAD
         } else if (feature.geometryType === 'GroundOverlay') {
           const [south, west, north, east] = feature.coordinates;
           const imageUrl = feature.style?.iconUrl;
@@ -345,6 +389,8 @@ export default function MapComponent({
               interactive: true,
             });
           }
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         } else if (feature.geometryType === 'MultiGeometry') {
           // Group multiple geometries together
           const subLayers: L.Layer[] = [];
@@ -384,6 +430,7 @@ export default function MapComponent({
           let popupContent = `<div class="p-1 font-sans text-xs max-w-64">
             <h3 class="font-bold text-sm text-slate-800 border-b pb-1 mb-1.5">${feature.name}</h3>`;
           
+<<<<<<< HEAD
           const isGenericDesc = feature.description && [
             'unknown point feature',
             'unknown line feature',
@@ -394,6 +441,9 @@ export default function MapComponent({
           ].includes(feature.description.trim().toLowerCase());
 
           if (feature.description && !isGenericDesc) {
+=======
+          if (feature.description) {
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             // Strip HTML elements for security, or keep simple styles
             const cleanDesc = feature.description.replace(/<[^>]*>/g, '').slice(0, 150);
             popupContent += `<p class="text-slate-600 mb-1.5 italic">${cleanDesc}${feature.description.length > 150 ? '...' : ''}</p>`;
@@ -451,6 +501,7 @@ export default function MapComponent({
         }
       });
 
+<<<<<<< HEAD
       // If a brand new layer is added and we haven't zoomed to it yet, fly to cover this layer
       if (isNewLayer && layer.features.length > 0 && !zoomedLayerIdsRef.current.has(layer.id)) {
         zoomedLayerIdsRef.current.add(layer.id);
@@ -461,6 +512,17 @@ export default function MapComponent({
           }
         } catch (e) {
           console.warn('Failed to fly to bounds for newly added layer', e);
+=======
+      // If a brand new layer is added, zoom/fit map bounds to cover this layer
+      if (isNewLayer && layer.features.length > 0) {
+        try {
+          const bounds = layerGroup.getBounds();
+          if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+          }
+        } catch (e) {
+          console.warn('Failed to calculate fit bounds for newly added layer', e);
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         }
       }
     });
@@ -477,6 +539,7 @@ export default function MapComponent({
 
     if (!highlightedFeature) return;
 
+<<<<<<< HEAD
     const leafletLayer = featureLayersRef.current[highlightedFeature.id];
 
     // Pan or zoom to the selected feature ONLY if it is not already visible in the viewport
@@ -509,6 +572,27 @@ export default function MapComponent({
         const [lat, lng] = highlightedFeature.coordinates;
         map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
       }
+=======
+    // Pan or zoom to the selected feature
+    const leafletLayer = featureLayersRef.current[highlightedFeature.id];
+    
+    // Highlight the bounds/coordinates
+    if (highlightedFeature.bounds) {
+      const [minLat, minLng, maxLat, maxLng] = highlightedFeature.bounds;
+      const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+      
+      if (bounds.isValid()) {
+        // Zoom to point or line bounds
+        if (highlightedFeature.geometryType === 'Point') {
+          map.setView([minLat, minLng], 15, { animate: true });
+        } else {
+          map.fitBounds(bounds, { padding: [100, 100], animate: true });
+        }
+      }
+    } else if (highlightedFeature.geometryType === 'Point') {
+      const [lat, lng] = highlightedFeature.coordinates;
+      map.setView([lat, lng], 15, { animate: true });
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
     }
 
     // Add a pulsing highlighting ring on top of the feature
@@ -539,6 +623,7 @@ export default function MapComponent({
         fillOpacity: 0.2,
         className: 'feature-pulse-active'
       }).addTo(highlightGroup);
+<<<<<<< HEAD
     } else if (highlightedFeature.geometryType === 'GroundOverlay') {
       const [south, west, north, east] = highlightedFeature.coordinates;
       L.rectangle([[south, west], [north, east]], {
@@ -548,6 +633,8 @@ export default function MapComponent({
         fillOpacity: 0.05,
         className: 'feature-pulse-active'
       }).addTo(highlightGroup);
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
     }
 
     // Programmatically open popup for this layer
@@ -558,6 +645,7 @@ export default function MapComponent({
     }
   }, [highlightedFeature]);
 
+<<<<<<< HEAD
   // Zoom/Fly to full layer bounds when requested
   useEffect(() => {
     const map = mapRef.current;
@@ -588,6 +676,8 @@ export default function MapComponent({
     }
   }, [zoomLayerRequest]);
 
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   // Handle map resizing
   useEffect(() => {
     const map = mapRef.current;

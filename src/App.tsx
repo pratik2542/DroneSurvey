@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 import React, { useState, useRef, useEffect } from 'react';
 import { parseGeospatialFile, parseKml } from './utils/kmlParser';
 import { parseShapefile } from './utils/shpParser';
+=======
+import React, { useState, useRef } from 'react';
+import { parseGeospatialFile, parseKml } from './utils/kmlParser';
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 import { KmlLayer, KmlFeature, BasemapType } from './types';
 import MapComponent from './components/MapComponent';
 import LayersPanel from './components/LayersPanel';
@@ -17,6 +22,7 @@ import {
   Globe, 
   Check, 
   AlertCircle,
+<<<<<<< HEAD
   HelpCircle,
   Link,
   FileText,
@@ -24,6 +30,9 @@ import {
   ShieldCheck,
   Plus,
   Trash2
+=======
+  HelpCircle
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 } from 'lucide-react';
 
 const SAMPLE_KML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -143,6 +152,7 @@ export default function App() {
   const [cursorCoords, setCursorCoords] = useState<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+<<<<<<< HEAD
   const [zoomLayerRequest, setZoomLayerRequest] = useState<{ layerId: string; timestamp: number } | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -570,6 +580,11 @@ export default function App() {
     setTileBounds({ north: '', south: '', east: '', west: '' });
   };
 
+=======
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   // Computed state for active/selected layer
   const activeLayer = layers.find(l => l.id === selectedLayerId) || null;
 
@@ -607,11 +622,20 @@ export default function App() {
 
   // Handle Zoom to full Layer bounds
   const handleZoomToLayer = (layer: KmlLayer) => {
+<<<<<<< HEAD
     // Make sure layer is visible
     if (!visibleLayerIds.includes(layer.id)) {
       setVisibleLayerIds(prev => [...prev, layer.id]);
     }
     setZoomLayerRequest({ layerId: layer.id, timestamp: Date.now() });
+=======
+    // Map handles zoom automatically when we trigger isNewLayer, 
+    // to trigger it programmatically we toggle visibility off and on
+    setVisibleLayerIds(prev => prev.filter(id => id !== layer.id));
+    setTimeout(() => {
+      setVisibleLayerIds(prev => [...prev, layer.id]);
+    }, 50);
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   };
 
   // Handle Feature selection (from map, list, or table)
@@ -623,7 +647,11 @@ export default function App() {
     }
   };
 
+<<<<<<< HEAD
   // Handle file uploads (kmz, kml, zip, tif, tiff)
+=======
+  // Handle file uploads (kmz, kml)
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   const processUploadedFiles = async (files: FileList) => {
     setLoading(true);
     setErrorMsg(null);
@@ -634,12 +662,18 @@ export default function App() {
       const file = files[i];
       const ext = file.name.split('.').pop()?.toLowerCase();
       
+<<<<<<< HEAD
       if (ext !== 'kml' && ext !== 'kmz' && ext !== 'zip' && ext !== 'tif' && ext !== 'tiff') {
         setErrorMsg(`Unsupported file type: .${ext}. Please upload a valid .kml, .kmz, .zip, or .tif file.`);
+=======
+      if (ext !== 'kml' && ext !== 'kmz') {
+        setErrorMsg(`Unsupported file type: .${ext}. Please upload a valid .kml or .kmz file.`);
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         continue;
       }
 
       try {
+<<<<<<< HEAD
         if (ext === 'tif' || ext === 'tiff') {
           const formData = new FormData();
           formData.append('file', file);
@@ -736,6 +770,19 @@ export default function App() {
           setSelectedLayerId(parsedLayer.id);
           loadedLayersCount++;
         }
+=======
+        const parsedLayer = await parseGeospatialFile(file);
+        
+        if (parsedLayer.features.length === 0) {
+          setErrorMsg(`The file "${file.name}" has no renderable geographic shapes or placemarks.`);
+          continue;
+        }
+
+        setLayers(prev => [...prev, parsedLayer]);
+        setVisibleLayerIds(prev => [...prev, parsedLayer.id]);
+        setSelectedLayerId(parsedLayer.id);
+        loadedLayersCount++;
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
       } catch (err: any) {
         console.error(err);
         setErrorMsg(`Failed to parse file "${file.name}": ${err.message || err}`);
@@ -788,6 +835,7 @@ export default function App() {
   };
 
   return (
+<<<<<<< HEAD
     <div className="h-screen overflow-hidden bg-high-bg text-high-text flex flex-col font-sans antialiased selection:bg-high-accent selection:text-high-bg">
       {/* 1. Header Bar */}
       <header className="bg-high-darker border-b border-high-border px-6 py-4 flex flex-row items-center justify-between gap-4 z-10 shadow-lg">
@@ -812,6 +860,21 @@ export default function App() {
               </h1>
               <p className="hidden md:block text-[10px] text-high-teal font-semibold font-mono">Standalone spatial viewer & KML/KMZ/TIF parser workbench</p>
             </div>
+=======
+    <div className="min-h-screen bg-high-bg text-high-text flex flex-col font-sans antialiased selection:bg-high-accent selection:text-high-bg">
+      {/* 1. Header Bar */}
+      <header className="bg-high-darker border-b border-high-border px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 z-10 shadow-lg">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 bg-high-bg border border-high-border rounded-lg shadow-inner">
+            <Globe className="w-5 h-5 text-high-accent" />
+          </div>
+          <div>
+            <h1 className="text-sm font-extrabold tracking-widest text-high-text flex items-center space-x-1.5 uppercase">
+              <span>Geospatial KMZ Viewer</span>
+              <span className="text-[9px] bg-high-border text-high-accent border border-high-accent px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Web GIS</span>
+            </h1>
+            <p className="text-[10px] text-high-teal font-semibold font-mono">Standalone spatial viewer & KML/KMZ parser workbench</p>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           </div>
         </div>
 
@@ -820,10 +883,17 @@ export default function App() {
           {layers.length === 0 && (
             <button
               onClick={loadSampleData}
+<<<<<<< HEAD
               className="px-2.5 py-1.5 bg-high-bg hover:bg-high-border text-high-accent text-xs font-bold rounded-lg transition-all flex items-center space-x-1 border border-high-border shadow-sm group cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />
               <span className="hidden sm:inline">SF Sample</span>
+=======
+              className="px-3 py-1.5 bg-high-bg hover:bg-high-border text-high-accent text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 border border-high-border shadow-sm group cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />
+              <span>Load SF Sample</span>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             </button>
           )}
 
@@ -832,20 +902,29 @@ export default function App() {
             className="px-3 py-1.5 bg-high-accent hover:bg-high-accent/80 text-high-bg text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 shadow-md shadow-high-accent/10 cursor-pointer border border-high-accent"
           >
             <Upload className="w-3.5 h-3.5" />
+<<<<<<< HEAD
             <span>Import</span>
+=======
+            <span>Import Layers</span>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           </button>
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
             multiple
+<<<<<<< HEAD
             accept=".kml,.kmz,.zip,.tif,.tiff"
+=======
+            accept=".kml,.kmz"
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             className="hidden"
           />
         </div>
       </header>
 
       {/* 2. Main Workbench Area */}
+<<<<<<< HEAD
       <main className="flex-1 flex flex-col lg:flex-row min-h-0 w-full relative overflow-hidden">
         
         {/* Left Control Rail (Responsive Drawer) */}
@@ -1156,6 +1235,42 @@ export default function App() {
 
           {/* Layers List Panel */}
           <div className="h-[220px] shrink-0 flex flex-col">
+=======
+      <main className="flex-1 flex flex-col lg:flex-row min-h-0 w-full relative">
+        {/* Left Control Rail */}
+        <div className="w-full lg:w-80 flex flex-col p-4 space-y-4 border-r border-high-border bg-high-darker shrink-0 lg:overflow-y-auto">
+          {/* Uploader / Dropzone */}
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all select-none ${
+              isDragOver
+                ? 'border-high-accent bg-high-border/20 shadow-md shadow-high-accent/5'
+                : 'border-high-border hover:border-high-teal bg-high-bg/30 hover:bg-high-bg'
+            }`}
+          >
+            <Upload className={`w-7 h-7 mb-2 stroke-[1.5] transition-transform ${isDragOver ? 'scale-110 text-high-accent' : 'text-high-teal/70'}`} />
+            <span className="text-xs font-bold text-high-text">Drag & Drop KMZ / KML</span>
+            <span className="text-[10px] text-high-teal mt-1 font-mono">or click to browse local files</span>
+          </div>
+
+          {/* Error Message */}
+          {errorMsg && (
+            <div className="bg-rose-950/20 border border-rose-900/50 rounded-lg p-3 flex items-start space-x-2.5 text-xs text-rose-300 font-mono">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <span className="font-bold block mb-0.5 uppercase tracking-wider text-[10px]">Import Error</span>
+                <p className="leading-relaxed opacity-90 break-words">{errorMsg}</p>
+              </div>
+              <button onClick={() => setErrorMsg(null)} className="text-[10px] text-high-teal hover:text-white font-bold px-1 py-0.5">Dismiss</button>
+            </div>
+          )}
+
+          {/* Layers List Panel */}
+          <div className="flex-1 min-h-[180px] lg:min-h-0">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             <LayersPanel
               layers={layers}
               visibleLayerIds={visibleLayerIds}
@@ -1170,7 +1285,11 @@ export default function App() {
           </div>
 
           {/* Features in Selected Layer */}
+<<<<<<< HEAD
           <div className="h-[240px] shrink-0 flex flex-col">
+=======
+          <div className="flex-1 min-h-[180px] lg:min-h-0">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             <FeatureList
               layer={activeLayer}
               onFeatureSelect={handleFeatureSelect}
@@ -1180,6 +1299,7 @@ export default function App() {
         </div>
 
         {/* Center Mapping Area */}
+<<<<<<< HEAD
         <div className="flex-1 flex flex-col min-w-0 p-3 sm:p-4 bg-high-bg space-y-3 sm:space-y-4 h-full overflow-hidden relative">
           
           {/* Main Map with Toolbar */}
@@ -1190,27 +1310,54 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <Map className="w-4 h-4 text-high-accent" />
                 <span className="text-[10px] sm:text-xs font-bold text-high-accent tracking-widest uppercase">GIS Canvas</span>
+=======
+        <div className="flex-1 flex flex-col min-w-0 p-4 bg-high-bg space-y-4">
+          
+          {/* Main Map with Toolbar */}
+          <div className="flex-1 flex flex-col min-h-[350px] relative">
+            
+            {/* Map Header Toolbar */}
+            <div className="bg-high-darker border border-high-border border-b-0 rounded-t-xl px-4 py-2.5 flex items-center justify-between gap-4">
+              <div className="flex items-center space-x-2">
+                <Map className="w-4 h-4 text-high-accent" />
+                <span className="text-xs font-bold text-high-accent tracking-widest uppercase">Interactive GIS Canvas</span>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
               </div>
               
               {/* Basemap Selection */}
               <div className="flex items-center space-x-1.5 text-xs">
+<<<<<<< HEAD
                 <select
                   value={basemap}
                   onChange={(e) => setBasemap(e.target.value as BasemapType)}
                   className="bg-high-bg border border-high-border text-high-text rounded px-1.5 py-0.5 focus:outline-none focus:border-high-accent font-bold text-[10px]"
+=======
+                <span className="text-high-teal text-[10px] font-bold uppercase tracking-widest hidden sm:inline font-mono">Basemap:</span>
+                <select
+                  value={basemap}
+                  onChange={(e) => setBasemap(e.target.value as BasemapType)}
+                  className="bg-high-bg border border-high-border text-high-text rounded px-2 py-1 focus:outline-none focus:border-high-accent font-bold text-[11px]"
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                 >
                   <option value="osm">Standard Streets (OSM)</option>
                   <option value="satellite">High-Res Satellite (Esri)</option>
                   <option value="light">CartoDB Light Neutrals</option>
                   <option value="dark">CartoDB Dark Matter</option>
                   <option value="terrain">Topographic/Terrain</option>
+<<<<<<< HEAD
                   <option value="none">None (Hide Basemap Tiles)</option>
+=======
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                 </select>
               </div>
             </div>
 
             {/* Map Canvas */}
+<<<<<<< HEAD
             <div className="flex-1 min-h-0 relative">
+=======
+            <div className="flex-1 min-h-0">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
               <MapComponent
                 layers={layers}
                 visibleLayerIds={visibleLayerIds}
@@ -1218,6 +1365,7 @@ export default function App() {
                 onFeatureSelect={handleFeatureSelect}
                 basemap={basemap}
                 onCoordinatesChange={(lat, lng) => setCursorCoords({ lat, lng })}
+<<<<<<< HEAD
                 zoomLayerRequest={zoomLayerRequest}
               />
 
@@ -1257,12 +1405,30 @@ export default function App() {
               </div>
               <div className="font-semibold text-right truncate max-w-[50%]">
                 <span>Lat: {cursorCoords.lat.toFixed(4)}, Lng: {cursorCoords.lng.toFixed(4)}</span>
+=======
+              />
+            </div>
+
+            {/* Status / Coordinate Bar */}
+            <div className="bg-high-darker border border-high-border border-t-0 rounded-b-xl px-4 py-1.5 flex items-center justify-between text-[10px] text-high-teal select-none font-mono">
+              <div className="flex items-center space-x-3.5 font-semibold">
+                <span>Layers: {layers.length}</span>
+                <span>Active: {visibleLayerIds.length}</span>
+                <span>Features: {layers.reduce((acc, l) => acc + l.features.length, 0)}</span>
+              </div>
+              <div className="font-semibold">
+                <span>Lat: {cursorCoords.lat.toFixed(5)}, Lng: {cursorCoords.lng.toFixed(5)}</span>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
               </div>
             </div>
           </div>
 
           {/* Bottom Attribute Table (QGIS style) */}
+<<<<<<< HEAD
           <div className="fixed bottom-0 left-0 right-0 z-[1040] px-3 pb-3 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:p-0 lg:z-0 shrink-0">
+=======
+          <div className="shrink-0">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
             <AttributeTable
               layer={activeLayer}
               onFeatureSelect={handleFeatureSelect}
@@ -1271,6 +1437,7 @@ export default function App() {
           </div>
         </div>
 
+<<<<<<< HEAD
         {/* Right Drawer (Responsive Details Panel) */}
         <div className={`fixed inset-y-0 right-0 z-[1100] w-80 max-w-[85vw] flex flex-col p-4 border-l border-high-border bg-high-darker transition-transform duration-300 transform lg:relative lg:translate-x-0 lg:z-0 lg:shadow-none lg:w-80 lg:max-w-none lg:h-full lg:overflow-y-auto lg:p-4 ${
           mobileRightPanelOpen ? 'translate-x-0' : 'translate-x-full'
@@ -1279,10 +1446,19 @@ export default function App() {
             feature={selectedFeature}
             layer={selectedFeatureLayer}
             onClose={handleCloseDetails}
+=======
+        {/* Right Info Drawer (Selected Feature details) */}
+        <div className="w-full lg:w-80 p-4 border-l border-high-border bg-high-darker shrink-0 lg:overflow-y-auto">
+          <FeatureDetails
+            feature={selectedFeature}
+            layer={selectedFeatureLayer}
+            onClose={() => handleFeatureSelect(null, null)}
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           />
         </div>
       </main>
 
+<<<<<<< HEAD
       {/* Drawer Backdrop Overlay */}
       {(mobileLeftPanelOpen || mobileRightPanelOpen) && (
         <div 
@@ -1301,6 +1477,15 @@ export default function App() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-high-accent mb-3.5"></div>
             <p className="text-xs font-bold text-high-text uppercase tracking-widest font-mono">Processing Spatial Layers</p>
             <p className="text-[10px] text-high-teal mt-1.5 leading-relaxed font-mono">Reading files, extracting coordinates, and mapping shapes to client-side memory...</p>
+=======
+      {/* Full Screen Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-high-darker/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+          <div className="bg-high-bg border border-high-border p-6 rounded-2xl flex flex-col items-center max-w-xs text-center shadow-2xl">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-high-accent mb-3.5"></div>
+            <p className="text-xs font-bold text-high-text uppercase tracking-widest font-mono">Processing Spatial Layers</p>
+            <p className="text-[10px] text-high-teal mt-1.5 leading-relaxed font-mono">Reading zip files, extracting coordinates, and mapping shapes to client-side memory...</p>
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           </div>
         </div>
       )}

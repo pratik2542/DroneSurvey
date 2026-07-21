@@ -15,8 +15,12 @@ import {
   GitCommit,
   Box,
   Layers,
+<<<<<<< HEAD
   Sparkles,
   Image
+=======
+  Sparkles
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 } from 'lucide-react';
 
 interface AttributeTableProps {
@@ -91,9 +95,13 @@ export default function AttributeTable({
       case 'LineString':
         return <GitCommit className="w-3 h-3 text-emerald-500" title="LineString" />;
       case 'Polygon':
+<<<<<<< HEAD
         return <Box className="w-3.5 h-3.5 text-amber-500" title="Polygon" />;
       case 'GroundOverlay':
         return <Image className="w-3.5 h-3.5 text-cyan-400" title="GroundOverlay" />;
+=======
+        return <Box className="w-3 h-3 text-amber-500" title="Polygon" />;
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
       default:
         return <Layers className="w-3 h-3 text-indigo-500" title="MultiGeometry/Other" />;
     }
@@ -127,7 +135,11 @@ export default function AttributeTable({
 
       {/* Table Content Area */}
       {isOpen && (
+<<<<<<< HEAD
         <div className="flex flex-col h-80 bg-high-bg">
+=======
+        <div className="flex flex-col h-96 bg-high-bg">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           {/* Controls Bar */}
           <div className="px-4 py-3 border-b border-high-border flex flex-col md:flex-row md:items-center justify-between gap-3 bg-high-bg">
             {/* Search */}
@@ -143,7 +155,11 @@ export default function AttributeTable({
             </div>
 
             {/* Pagination Controls */}
+<<<<<<< HEAD
             <div className="flex items-center justify-between w-full md:w-auto md:justify-start md:space-x-3.5 text-xs text-high-teal font-semibold">
+=======
+            <div className="flex items-center space-x-3 text-xs text-high-teal self-end md:self-auto font-semibold">
+>>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
               <div className="flex items-center space-x-1">
                 <span>Show:</span>
                 <select
