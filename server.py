@@ -130,7 +130,7 @@ def download_gdrive_file(file_id, destination_path):
     import gdown
     url = f"https://drive.google.com/uc?id={file_id}"
     print(f"Downloading from Google Drive file_id={file_id} ...")
-    gdown.download(url, destination_path, quiet=False, fuzzy=True)
+    gdown.download(url, destination_path, quiet=False)
 
     if not os.path.exists(destination_path):
         raise Exception("Download failed: file not found after gdown.")
