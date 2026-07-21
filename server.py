@@ -1,22 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 
-# Import localtileserver blueprint (path varies by version)
-_tileserver_blueprint = None
-try:
-    from localtileserver.web.blueprint import tileserver as _tileserver_blueprint
-except ImportError:
-    try:
-        from localtileserver.blueprint import tileserver as _tileserver_blueprint
-    except ImportError:
-        try:
-            from localtileserver import TileClient
-            from localtileserver.web import get_clean_filename_from_url
-            # Newer localtileserver exposes blueprint differently
-            import localtileserver
-            _tileserver_blueprint = getattr(localtileserver, 'tileserver', None)
-        except Exception as _lts_err:
-            print(f"Warning: localtileserver blueprint not found: {_lts_err}")
-            _tileserver_blueprint = None
 import os
 import uuid
 import json
@@ -59,12 +42,7 @@ except Exception as e:
 
 app = Flask(__name__)
 
-# Register localtileserver blueprint (if available)
-if _tileserver_blueprint is not None:
-    app.register_blueprint(_tileserver_blueprint)
-    print("localtileserver blueprint registered successfully.")
-else:
-    print("Warning: localtileserver blueprint not registered. Tile serving may be limited.")
+
 
 # Manual CORS setup to support dev/production calls from mobile/tablet
 @app.after_request
@@ -270,6 +248,120 @@ def process_survey_async(survey_doc):
         except Exception:
             pass
         update_survey_status(survey_doc, 'failed', error_msg=str(e))
+
+# --- Native Rasterio Tile Server Endpoints ---
+
+@app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
+def serve_tile(z, x, y):
+    """Serve XYZ map tiles from a local GeoTIFF using rasterio."""
+    import io
+    import math
+    import numpy as np
+    import rasterio
+    from rasterio.warp import reproject, Resampling, calculate_default_transform
+    from rasterio.crs import CRS
+
+    filename = request.args.get('filename')
+    if not filename or not os.path.exists(filename):
+        return jsonify({'error': 'File not found'}), 404
+
+    try:
+        # Convert XYZ tile to EPSG:3857 bounds
+        def tile_to_bounds(z, x, y):
+            n = 2.0 ** z
+            lon_min = x / n * 360.0 - 180.0
+            lon_max = (x + 1) / n * 360.0 - 180.0
+            lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
+            lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n))))
+            R = 6378137.0
+            xmin = math.radians(lon_min) * R
+            xmax = math.radians(lon_max) * R
+            ymin = math.log(math.tan(math.pi/4 + math.radians(lat_min)/2)) * R
+            ymax = math.log(math.tan(math.pi/4 + math.radians(lat_max)/2)) * R
+            return xmin, ymin, xmax, ymax
+
+        tile_size = 256
+        xmin, ymin, xmax, ymax = tile_to_bounds(z, x, y)
+        dst_crs = CRS.from_epsg(3857)
+
+        with rasterio.open(filename) as src:
+            dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, tile_size, tile_size)
+
+            # Reproject raster into tile space
+            num_bands = min(src.count, 3)
+            data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
+            alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
+
+            for band_idx in range(1, num_bands + 1):
+                band_data, _ = reproject(
+                    source=rasterio.band(src, band_idx),
+                    destination=data[band_idx - 1],
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.bilinear
+                )
+
+            # Create alpha channel from first band (non-zero = opaque)
+            alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+
+        # Write PNG tile
+        import struct, zlib
+
+        def write_png(r, g, b, a):
+            width = height = tile_size
+            def chunk(name, data):
+                c = struct.pack('>I', len(data)) + name + data
+                return c + struct.pack('>I', zlib.crc32(c[4:]) & 0xffffffff)
+            header = b'\x89PNG\r\n\x1a\n'
+            ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
+            # Actually use PIL for proper PNG encoding
+            from PIL import Image
+            img = Image.fromarray(np.stack([r, g, b, a], axis=2), 'RGBA')
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            buf.seek(0)
+            return buf
+
+        if num_bands >= 3:
+            buf = write_png(data[0], data[1], data[2], alpha)
+        else:
+            buf = write_png(data[0], data[0], data[0], alpha)
+
+        return send_file(buf, mimetype='image/png')
+
+    except Exception as e:
+        print(f"Tile error z={z} x={x} y={y}: {e}")
+        # Return transparent 256x256 tile on error
+        import io
+        from PIL import Image
+        img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return send_file(buf, mimetype='image/png')
+
+
+@app.route('/api/bounds', methods=['GET'])
+def get_bounds():
+    """Return geographic bounds for a local GeoTIFF file."""
+    filename = request.args.get('filename')
+    if not filename or not os.path.exists(filename):
+        return jsonify({'error': 'File not found'}), 404
+    try:
+        bounds = get_raster_bounds(filename)
+        return jsonify({
+            'bounds': {
+                'left': bounds[2],
+                'bottom': bounds[0],
+                'right': bounds[3],
+                'top': bounds[1]
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # --- API Endpoints ---
 
