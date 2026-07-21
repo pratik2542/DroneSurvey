@@ -385,8 +385,18 @@ export default function App() {
     if (!urlInput.trim()) return;
     setLoading(true);
     setErrorMsg(null);
+
+    const input = urlInput.trim();
+    if (input.includes('drive.google.com') && (input.includes('.tif') || input.includes('_cog') || input.includes('orthomosaic'))) {
+      setErrorMsg(
+        'GeoTIFF rasters on Google Drive must be registered in the ADMIN tab so the tile server can process and stream map tiles!'
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
-      const config = getDirectDownloadUrl(urlInput.trim());
+      const config = getDirectDownloadUrl(input);
       if (!config) {
         throw new Error('Invalid URL format. Please paste a valid link.');
       }
@@ -425,7 +435,11 @@ export default function App() {
       setUploadTab('local');
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(`Failed to import from link: ${err.message || err}`);
+      if (input.includes('drive.google.com')) {
+        setErrorMsg('Google Drive blocks direct browser downloads due to CORS. Please use the ADMIN tab to publish your survey link to the Cloud Catalog!');
+      } else {
+        setErrorMsg(`Failed to import from link: ${err.message || err}`);
+      }
     } finally {
       setLoading(false);
     }
