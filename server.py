@@ -6,6 +6,10 @@ import json
 import requests
 import threading
 
+# Limit GDAL internal cache to prevent OOM on large file processing.
+# Must be set before rasterio is imported anywhere.
+os.environ.setdefault('GDAL_CACHEMAX', '512')  # 512 MB
+
 # --- Google Drive Service Account Setup ---
 GDRIVE_SA_CREDS = None
 try:
@@ -188,32 +192,56 @@ def get_raster_bounds(filepath):
         # transform_bounds returns (west, south, east, north)
         return [bounds[1], bounds[3], bounds[0], bounds[2]] # [minLat, maxLat, minLng, maxLng]
 
-# Convert GeoTIFF to Cloud Optimized GeoTIFF (COG) using python rasterio
+# Check if a GeoTIFF is already Cloud Optimized (has overviews + tiling)
+def is_cog(filepath):
+    import rasterio
+    try:
+        with rasterio.open(filepath) as src:
+            has_overviews = len(src.overviews(1)) > 0
+            is_tiled = src.profile.get('tiled', False)
+            return has_overviews and is_tiled
+    except Exception:
+        return False
+
+# Convert GeoTIFF to Cloud Optimized GeoTIFF (COG) using rasterio.
+# Uses block-windowed reads to avoid loading full bands into RAM (prevents OOM).
 def convert_to_cog(input_path, output_path):
     import rasterio
     from rasterio.enums import Resampling
-    
-    print(f"Building pyramids for {input_path}...")
+
+    file_size_gb = os.path.getsize(input_path) / (1024 ** 3)
+    # Files > 4 GB require BigTIFF format (standard TIFF max is ~4 GB)
+    bigtiff = 'YES' if file_size_gb > 3.9 else 'NO'
+    print(f"File size: {file_size_gb:.1f} GB — BIGTIFF={bigtiff}")
+
+    print(f"Building overviews for {os.path.basename(input_path)}...")
     with rasterio.open(input_path, 'r+') as src:
         factors = [2, 4, 8, 16, 32]
         src.build_overviews(factors, Resampling.nearest)
         src.update_tags(ns='rio_overview', resampling='nearest')
-        
-    print(f"Translating to COG...")
+
+    print(f"Writing COG tiles (block-windowed)...")
     with rasterio.open(input_path) as src:
-        kwargs = src.meta.copy()
-        kwargs.update({
+        meta = src.meta.copy()
+        meta.update({
             'driver': 'GTiff',
             'tiled': True,
             'blockxsize': 256,
             'blockysize': 256,
             'compress': 'deflate',
             'predictor': 2,
-            'copy_src_overviews': True
+            'copy_src_overviews': True,
+            'BIGTIFF': bigtiff,
         })
-        with rasterio.open(output_path, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                dst.write(src.read(i), i)
+        with rasterio.open(output_path, 'w', **meta) as dst:
+            # Read & write one 256x256 block at a time — never loads a full band into RAM
+            windows = list(src.block_windows(1))
+            total = len(windows)
+            for idx, (_, window) in enumerate(windows):
+                for band_idx in range(1, src.count + 1):
+                    dst.write(src.read(band_idx, window=window), band_idx, window=window)
+                if idx % 500 == 0:
+                    print(f"  COG progress: {idx}/{total} blocks ({100*idx//total}%)")
 
 # Asynchronous Background Caching & Processing Thread
 def process_survey_async(survey_doc):
@@ -235,19 +263,25 @@ def process_survey_async(survey_doc):
         bounds = None
         
         if survey_type == 'raster':
-            # 2. Convert to COG
-            update_survey_status(survey_doc, 'converting')
-            print(f"Async: Converting {name} to COG...")
-            convert_to_cog(temp_input, temp_output)
-            
+            # 2. Check if already COG (uploaded via local converter tool)
+            if is_cog(temp_input):
+                print(f"Async: {name} is already a COG — skipping conversion.")
+                import shutil
+                shutil.copy2(temp_input, temp_output)
+            else:
+                # Convert raw TIF to COG
+                update_survey_status(survey_doc, 'converting')
+                print(f"Async: Converting {name} to COG...")
+                convert_to_cog(temp_input, temp_output)
+
             # 3. Read bounds
             bounds = get_raster_bounds(temp_output)
-            
-            # 4. Save to local uploads folder as local cache
+
+            # 4. Save to uploads cache
             local_dest = os.path.join(UPLOAD_FOLDER, f"{survey_id}.tif")
             import shutil
             shutil.copy2(temp_output, local_dest)
-            
+
             final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?filename={local_dest}"
         else:
             # Vector layer
