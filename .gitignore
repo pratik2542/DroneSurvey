@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Secret key files — NEVER commit these
+service_account.json
+*service_account*.json
+firebase-key.json
+*firebase-key*.json
+converter_tool/service_account.json
