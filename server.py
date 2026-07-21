@@ -11,20 +11,38 @@ HAS_FIREBASE = False
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore, storage
+    
+    cred = None
+    env_creds = os.environ.get('FIREBASE_CREDENTIALS')
     key_path = os.path.join(os.path.dirname(__file__), 'firebase-key.json')
-    if os.path.exists(key_path):
+    
+    # 1. Try loading credentials from environment variable string
+    if env_creds:
+        try:
+            creds_dict = json.loads(env_creds)
+            cred = credentials.Certificate(creds_dict)
+            print("Loaded Firebase credentials from FIREBASE_CREDENTIALS environment variable.")
+        except Exception as json_err:
+            print(f"Failed to parse FIREBASE_CREDENTIALS env var: {json_err}")
+            
+    # 2. Fall back to local file if not loaded from env
+    if not cred and os.path.exists(key_path):
         cred = credentials.Certificate(key_path)
+        print("Loaded Firebase credentials from firebase-key.json file.")
+        
+    if cred:
+        bucket_domain = os.environ.get('FIREBASE_BUCKET', 'dronesurvey-app.appspot.com')
         firebase_admin.initialize_app(cred, {
-            'storageBucket': 'dronesurvey-app.appspot.com'
+            'storageBucket': bucket_domain
         })
         db = firestore.client()
         bucket = storage.bucket()
         HAS_FIREBASE = True
-        print("Firebase Admin successfully initialized (Firestore + Cloud Storage).")
+        print(f"Firebase Admin successfully initialized on bucket: {bucket_domain}")
     else:
-        print("firebase-key.json not found. Bypassing Firebase initialization.")
+        print("Firebase credentials not found (no env var or local file). Bypassing Firebase.")
 except Exception as e:
-    print(f"Firebase initialization bypassed: {e}.")
+    print(f"Firebase initialization bypassed/failed: {e}")
 
 app = Flask(__name__)
 
@@ -175,7 +193,7 @@ def convert_to_cog(input_path, output_path):
             for i in range(1, src.count + 1):
                 dst.write(src.read(i), i)
 
-# Asynchronous Background Processing Thread
+# Asynchronous Background Caching & Processing Thread
 def process_survey_async(survey_doc):
     survey_id = survey_doc['id']
     file_id = get_gdrive_file_id(survey_doc['originalUrl'])
@@ -188,7 +206,7 @@ def process_survey_async(survey_doc):
     try:
         # 1. Download
         update_survey_status(survey_doc, 'downloading')
-        print(f"Async: Downloading {name}...")
+        print(f"Async: Downloading {name} from GDrive...")
         download_gdrive_file(file_id, temp_input)
         
         final_url = ""
@@ -200,38 +218,21 @@ def process_survey_async(survey_doc):
             print(f"Async: Converting {name} to COG...")
             convert_to_cog(temp_input, temp_output)
             
-            # 3. Read bounds using closed context
+            # 3. Read bounds
             bounds = get_raster_bounds(temp_output)
             
-            # 4. Upload to Cloud
-            if HAS_FIREBASE:
-                update_survey_status(survey_doc, 'uploading')
-                print(f"Async: Uploading {name} to Firebase Storage...")
-                blob = bucket.blob(f"rasters/{survey_id}.tif")
-                blob.upload_from_filename(temp_output)
-                blob.make_public()
-                final_url = f"https://titiler.xyz/cog/tiles/{{z}}/{{x}}/{{y}}.png?url={blob.public_url}"
-            else:
-                # Local fallback
-                local_dest = os.path.join(UPLOAD_FOLDER, f"{survey_id}.tif")
-                # Use copying instead of renaming to prevent file lock issues
-                import shutil
-                shutil.copy2(temp_output, local_dest)
-                final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?filename={local_dest}"
+            # 4. Save to local uploads folder as local cache
+            local_dest = os.path.join(UPLOAD_FOLDER, f"{survey_id}.tif")
+            import shutil
+            shutil.copy2(temp_output, local_dest)
+            
+            final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?filename={local_dest}"
         else:
             # Vector layer
-            if HAS_FIREBASE:
-                update_survey_status(survey_doc, 'uploading')
-                print(f"Async: Uploading vector {name} to Firebase...")
-                blob = bucket.blob(f"vectors/{survey_id}.kmz")
-                blob.upload_from_filename(temp_input)
-                blob.make_public()
-                final_url = blob.public_url
-            else:
-                local_dest = os.path.join(UPLOAD_FOLDER, f"{survey_id}.kmz")
-                import shutil
-                shutil.copy2(temp_input, local_dest)
-                final_url = f"/tile-server-proxy/uploads/{survey_id}.kmz"
+            local_dest = os.path.join(UPLOAD_FOLDER, f"{survey_id}.kmz")
+            import shutil
+            shutil.copy2(temp_input, local_dest)
+            final_url = f"/tile-server-proxy/uploads/{survey_id}.kmz"
                 
         # Cleanup temp files
         try:
@@ -242,11 +243,10 @@ def process_survey_async(survey_doc):
             
         # Complete
         update_survey_status(survey_doc, 'completed', url=final_url, bounds=bounds)
-        print(f"Async: Completed processing survey: {name}")
+        print(f"Async: Completed processing & caching survey: {name}")
         
     except Exception as e:
         print(f"Async processing failed for {name}: {e}")
-        # Clean up files
         try:
             if os.path.exists(temp_input): os.remove(temp_input)
             if os.path.exists(temp_output): os.remove(temp_output)
@@ -268,6 +268,50 @@ def get_surveys():
             return jsonify({'error': str(e)}), 500
     else:
         return jsonify(load_local_db())
+
+@app.route('/api/surveys/cache-status/<id>', methods=['GET'])
+def get_cache_status(id):
+    survey_doc = None
+    if HAS_FIREBASE:
+        try:
+            doc_ref = db.collection('surveys').document(id)
+            doc = doc_ref.get()
+            if doc.exists:
+                survey_doc = doc.to_dict()
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        local_db = load_local_db()
+        for doc in local_db:
+            if doc['id'] == id:
+                survey_doc = doc
+                break
+                
+    if not survey_doc:
+        return jsonify({'error': 'Survey not found'}), 404
+        
+    filename = f"{id}.tif" if survey_doc['type'] == 'raster' else f"{id}.kmz"
+    local_path = os.path.join(UPLOAD_FOLDER, filename)
+    
+    if os.path.exists(local_path) and survey_doc.get('status') == 'completed':
+        return jsonify({
+            'cached': True,
+            'survey': survey_doc
+        })
+    else:
+        current_status = survey_doc.get('status', 'queued')
+        if current_status not in ['downloading', 'converting', 'uploading'] or not os.path.exists(local_path):
+            print(f"Cache miss for {survey_doc['name']}. Triggering background cache restore...")
+            survey_doc['status'] = 'downloading'
+            update_survey_status(survey_doc, 'downloading')
+            thread = threading.Thread(target=process_survey_async, args=(survey_doc,))
+            thread.start()
+            
+        return jsonify({
+            'cached': False,
+            'status': survey_doc.get('status', 'downloading'),
+            'survey': survey_doc
+        })
 
 @app.route('/api/process-survey', methods=['POST', 'OPTIONS'])
 def process_survey():

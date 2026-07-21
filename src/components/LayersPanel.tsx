@@ -110,16 +110,12 @@ export default function LayersPanel({
             return (
               <div
                 key={layer.id}
-<<<<<<< HEAD
                 onClick={() => {
                   onSelectLayer(layer.id);
                   if (isVisible) {
                     onZoomToLayer(layer);
                   }
                 }}
-=======
-                onClick={() => onSelectLayer(layer.id)}
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                 className={`group flex flex-col p-3 rounded-lg border transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-high-border border-high-accent shadow-md'
@@ -181,19 +177,11 @@ export default function LayersPanel({
                       {isVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     </button>
 
-<<<<<<< HEAD
                      <button
                       onClick={() => onZoomToLayer(layer)}
                       disabled={!isVisible || (layer.features.length === 0 && !layer.bounds)}
                       className={`p-1 rounded transition-colors ${
                         isVisible && (layer.features.length > 0 || layer.bounds)
-=======
-                    <button
-                      onClick={() => onZoomToLayer(layer)}
-                      disabled={!isVisible || layer.features.length === 0}
-                      className={`p-1 rounded transition-colors ${
-                        isVisible && layer.features.length > 0
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                           ? 'text-high-teal hover:bg-high-bg/50 hover:text-high-accent'
                           : 'text-high-border cursor-not-allowed'
                       }`}
@@ -223,17 +211,10 @@ export default function LayersPanel({
                 {/* Layer Meta Info */}
                 <div className="mt-1.5 pl-5 flex flex-col space-y-0.5 text-[10px] text-high-teal select-none font-mono">
                   <div className="flex items-center space-x-2 truncate">
-<<<<<<< HEAD
                     <span>{layer.tileUrl ? 'Service Layer' : `${layer.fileName} (${layer.fileSize})`}</span>
                   </div>
                   <div className="truncate text-high-text/70 font-semibold">
                     {layer.tileUrl ? 'Raster Tile Server' : (activeGeomStrings.length > 0 ? activeGeomStrings.join(' • ') : '0 features')}
-=======
-                    <span>{layer.fileName} ({layer.fileSize})</span>
-                  </div>
-                  <div className="truncate text-high-text/70 font-semibold">
-                    {activeGeomStrings.length > 0 ? activeGeomStrings.join(' • ') : '0 features'}
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                   </div>
                 </div>
 

@@ -8,12 +8,8 @@ import {
   Database,
   Layers,
   ChevronRight,
-<<<<<<< HEAD
   Filter,
   Image
-=======
-  Filter
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 } from 'lucide-react';
 
 interface FeatureListProps {
@@ -54,13 +50,10 @@ export default function FeatureList({
     });
   }, [layer, searchQuery, selectedTypeFilter]);
 
-<<<<<<< HEAD
   const visibleFeatures = useMemo(() => {
     return filteredFeatures.slice(0, 100);
   }, [filteredFeatures]);
 
-=======
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   const getGeometryIcon = (type: GeometryType) => {
     switch (type) {
       case 'Point':
@@ -69,11 +62,8 @@ export default function FeatureList({
         return <GitCommit className="w-3.5 h-3.5 text-emerald-500" />;
       case 'Polygon':
         return <Box className="w-3.5 h-3.5 text-amber-500" />;
-<<<<<<< HEAD
       case 'GroundOverlay':
         return <Image className="w-3.5 h-3.5 text-cyan-400" />;
-=======
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
       case 'MultiGeometry':
         return <Layers className="w-3.5 h-3.5 text-indigo-500" />;
       default:
@@ -170,7 +160,6 @@ export default function FeatureList({
             <p className="text-[10px] text-high-teal font-mono mt-0.5">Try adjusting your query or filter tags.</p>
           </div>
         ) : (
-<<<<<<< HEAD
           <>
             {visibleFeatures.map((feature) => {
               const isSelected = selectedFeatureId === feature.id;
@@ -220,47 +209,6 @@ export default function FeatureList({
               </div>
             )}
           </>
-=======
-          filteredFeatures.map((feature) => {
-            const isSelected = selectedFeatureId === feature.id;
-            return (
-              <button
-                key={feature.id}
-                onClick={() => onFeatureSelect(feature, layer)}
-                className={`w-full text-left flex items-start space-x-2.5 p-2 rounded-lg border transition-all ${
-                  isSelected
-                    ? 'bg-high-border border-high-accent shadow-md'
-                    : 'bg-high-bg border-high-border hover:border-high-teal hover:bg-high-border/20'
-                }`}
-              >
-                {/* Visual Geometry Indicator */}
-                <div className="p-1 bg-high-darker border border-high-border rounded-md flex-shrink-0 mt-0.5">
-                  {getGeometryIcon(feature.geometryType)}
-                </div>
-
-                {/* Text Metadata */}
-                <div className="flex-1 min-w-0 select-none">
-                  <div className="text-xs font-bold text-high-text truncate">
-                    {feature.name || 'Unnamed Placemark'}
-                  </div>
-                  <div className="text-[10px] text-high-teal/80 font-mono font-medium truncate">
-                    Type: {feature.geometryType}
-                    {Object.keys(feature.properties).length > 0 && (
-                      <span className="text-high-accent font-bold">
-                        {' '}
-                        • {Object.keys(feature.properties).length} attrs
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <ChevronRight className={`w-3.5 h-3.5 text-high-teal self-center transition-transform ${
-                  isSelected ? 'rotate-90 text-high-accent' : ''
-                }`} />
-              </button>
-            );
-          })
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         )}
       </div>
     </div>

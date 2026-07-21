@@ -38,13 +38,10 @@ function parseCoordinatesString(coordString: string | null): [number, number][] 
         const lng = parseFloat(parts[0]);
         const lat = parseFloat(parts[1]);
         if (!isNaN(lng) && !isNaN(lat)) {
-<<<<<<< HEAD
           // Ignore corrupt coordinates at/near [0, 0] (Null Island)
           if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) {
             return null;
           }
-=======
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           return [lat, lng]; // Leaflet uses [lat, lng]
         }
       }
@@ -279,7 +276,6 @@ function parseExtendedData(placemarkEl: Element): Record<string, string> {
 
 // Calculate bounding box for a feature
 function calculateFeatureBounds(geometryType: GeometryType, coords: any): [number, number, number, number] | undefined {
-<<<<<<< HEAD
   let minLat = Infinity;
   let maxLat = -Infinity;
   let minLng = Infinity;
@@ -305,20 +301,6 @@ function calculateFeatureBounds(geometryType: GeometryType, coords: any): [numbe
           if (lng < minLng) minLng = lng;
           if (lng > maxLng) maxLng = lng;
           hasCoords = true;
-=======
-  let lats: number[] = [];
-  let lngs: number[] = [];
-  
-  const collect = (type: string, c: any) => {
-    if (type === 'Point' && Array.isArray(c) && c.length === 2) {
-      lats.push(c[0]);
-      lngs.push(c[1]);
-    } else if (type === 'LineString' && Array.isArray(c)) {
-      c.forEach((point: any) => {
-        if (Array.isArray(point) && point.length === 2) {
-          lats.push(point[0]);
-          lngs.push(point[1]);
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
         }
       });
     } else if (type === 'Polygon' && Array.isArray(c)) {
@@ -327,7 +309,6 @@ function calculateFeatureBounds(geometryType: GeometryType, coords: any): [numbe
       if (Array.isArray(outerRing)) {
         outerRing.forEach((point: any) => {
           if (Array.isArray(point) && point.length === 2) {
-<<<<<<< HEAD
             const lat = point[0];
             const lng = point[1];
             if (lat < minLat) minLat = lat;
@@ -335,10 +316,6 @@ function calculateFeatureBounds(geometryType: GeometryType, coords: any): [numbe
             if (lng < minLng) minLng = lng;
             if (lng > maxLng) maxLng = lng;
             hasCoords = true;
-=======
-            lats.push(point[0]);
-            lngs.push(point[1]);
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           }
         });
       }
@@ -351,20 +328,9 @@ function calculateFeatureBounds(geometryType: GeometryType, coords: any): [numbe
   
   collect(geometryType, coords);
   
-<<<<<<< HEAD
   if (!hasCoords) return undefined;
   
   return [minLat, minLng, maxLat, maxLng];
-=======
-  if (lats.length === 0 || lngs.length === 0) return undefined;
-  
-  return [
-    Math.min(...lats),
-    Math.min(...lngs),
-    Math.max(...lats),
-    Math.max(...lngs)
-  ];
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 }
 
 // Parse KML Document into KmlLayer structure
@@ -442,7 +408,6 @@ export function parseKml(
     });
   }
   
-<<<<<<< HEAD
   // Extract all GroundOverlays
   const groundOverlays = doc.getElementsByTagName('GroundOverlay');
   for (let i = 0; i < groundOverlays.length; i++) {
@@ -520,8 +485,6 @@ export function parseKml(
     });
   }
   
-=======
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
   // Generate random bright base color for layer representation
   const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#14B8A6'];
   const layerColor = colors[Math.floor(Math.random() * colors.length)];

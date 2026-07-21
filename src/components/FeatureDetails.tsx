@@ -12,12 +12,8 @@ import {
   Info,
   Layers,
   MapPinHouse,
-<<<<<<< HEAD
   Globe,
   Image
-=======
-  Globe
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
 } from 'lucide-react';
 
 interface FeatureDetailsProps {
@@ -107,10 +103,7 @@ export default function FeatureDetails({
                 {feature.geometryType === 'Point' && <MapPin className="w-3 h-3 text-high-accent" />}
                 {feature.geometryType === 'LineString' && <GitCommit className="w-3 h-3 text-high-accent" />}
                 {feature.geometryType === 'Polygon' && <Box className="w-3 h-3 text-high-accent" />}
-<<<<<<< HEAD
                 {feature.geometryType === 'GroundOverlay' && <Image className="w-3 h-3 text-high-accent" />}
-=======
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
                 {feature.geometryType === 'MultiGeometry' && <Layers className="w-3 h-3 text-high-accent" />}
                 <span>{feature.geometryType}</span>
               </span>
@@ -162,7 +155,6 @@ export default function FeatureDetails({
           )}
         </div>
 
-<<<<<<< HEAD
         {/* Feature KML Description (If present and not generic placeholder text) */}
         {feature.description && ![
           'unknown point feature',
@@ -172,10 +164,6 @@ export default function FeatureDetails({
           'unknown feature',
           'placemark'
         ].includes(feature.description.trim().toLowerCase()) && (
-=======
-        {/* Feature KML Description (If present) */}
-        {feature.description && (
->>>>>>> e776b2d722bc03fd2549b33d87b3683ca5175dc1
           <div className="space-y-1">
             <h3 className="text-[10px] font-bold text-high-teal uppercase tracking-widest font-mono">KML Description</h3>
             <div 
