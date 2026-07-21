@@ -14,10 +14,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend files
 COPY server.py .
 
-# Create folders for temporary data processing
+# Set HOME to /app so gdown (and other tools) write their cache inside /app
+# instead of /.cache which doesn't exist on OpenShift's non-root containers.
+ENV HOME=/app
+
+# Create folders for temporary data processing and gdown cache
 # chmod 777 is required for OpenShift: it runs containers as a random non-root UID,
 # so the dirs must be world-writable at build time.
-RUN mkdir -p temp uploads && chmod -R 777 temp uploads
+RUN mkdir -p temp uploads .cache/gdown && chmod -R 777 temp uploads .cache/gdown
 
 EXPOSE 8000
 
