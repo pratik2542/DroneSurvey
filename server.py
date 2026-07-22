@@ -243,6 +243,10 @@ def convert_to_cog(input_path, output_path):
                 if idx % 500 == 0:
                     print(f"  COG progress: {idx}/{total} blocks ({100*idx//total}%)")
 
+# Cached token for vsicurl Google Drive streaming (avoid refreshing on every tile)
+_gdrive_token_cache = {'token': None, 'expiry': None}
+_gdrive_token_lock = threading.Lock()
+
 # Helper to build vsicurl source path + headers for Google Drive direct cloud streaming
 def get_gdrive_vsicurl_source(file_id):
     headers = {
@@ -251,15 +255,25 @@ def get_gdrive_vsicurl_source(file_id):
     }
     if GDRIVE_SA_CREDS:
         try:
-            from google.auth.transport.requests import Request
-            GDRIVE_SA_CREDS.refresh(Request())
-            token = GDRIVE_SA_CREDS.token
+            import datetime
+            with _gdrive_token_lock:
+                now = datetime.datetime.utcnow()
+                # Refresh token only if missing or expiring within 5 minutes
+                if (_gdrive_token_cache['token'] is None or
+                        _gdrive_token_cache['expiry'] is None or
+                        (_gdrive_token_cache['expiry'] - now).total_seconds() < 300):
+                    from google.auth.transport.requests import Request
+                    GDRIVE_SA_CREDS.refresh(Request())
+                    _gdrive_token_cache['token'] = GDRIVE_SA_CREDS.token
+                    _gdrive_token_cache['expiry'] = GDRIVE_SA_CREDS.expiry
+                    print(f"[TOKEN] Refreshed Google Drive token (expires {GDRIVE_SA_CREDS.expiry})")
+                token = _gdrive_token_cache['token']
             url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&supportsAllDrives=true"
             vsi_path = f"/vsicurl/{url}"
             headers['GDAL_HTTP_HEADERS'] = f"Authorization: Bearer {token}"
             return vsi_path, headers
         except Exception as e:
-            print(f"VSI token refresh error: {e}")
+            print(f"VSI token error: {e}")
 
     # Fallback for public drive files
     pub_url = f"https://drive.google.com/uc?export=download&id={file_id}"
@@ -351,9 +365,9 @@ def process_survey_async(survey_doc):
 
 # --- Native Rasterio Tile Server Endpoints ---
 
-# Thread lock & bounds cache for thread-safe, high-performance GDAL tile serving
-RASTER_TILE_LOCK = threading.Lock()
+# Bounds cache for fast tile bounding box checks
 RASTER_BOUNDS_CACHE = {}
+
 
 def get_cached_raster_wgs84_bounds(filepath, env_headers=None):
     if filepath in RASTER_BOUNDS_CACHE:
@@ -429,51 +443,50 @@ def serve_tile(z, x, y):
         dst_crs = CRS.from_epsg(3857)
         dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, tile_size, tile_size)
 
-        # 4. Thread-safe GDAL reprojection (works for local files AND cloud vsicurl streams)
-        with RASTER_TILE_LOCK:
-            ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
-            with ctx:
-                with rasterio.open(source_path) as src:
-                    src_crs = src.crs if src.crs else CRS.from_epsg(4326)
-                    num_bands = min(src.count, 3)
-                    print(f"[TILE {z}/{x}/{y}] src bands={src.count} crs={src.crs} nodata={src.nodata} dtype={src.dtypes[0]} size={src.width}x{src.height}")
-                    data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
+        # 4. GDAL reprojection — rasterio reads are thread-safe, no global lock needed
+        ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
+        with ctx:
+            with rasterio.open(source_path) as src:
+                src_crs = src.crs if src.crs else CRS.from_epsg(4326)
+                num_bands = min(src.count, 3)
+                overviews = src.overviews(1)
+                print(f"[TILE {z}/{x}/{y}] src bands={src.count} crs={src.crs} overviews={overviews} size={src.width}x{src.height}")
+                data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
-                    for band_idx in range(1, num_bands + 1):
-                        reproject(
-                            source=rasterio.band(src, band_idx),
-                            destination=data[band_idx - 1],
-                            src_transform=src.transform,
-                            src_crs=src_crs,
-                            dst_transform=dst_transform,
-                            dst_crs=dst_crs,
-                            resampling=Resampling.bilinear
-                        )
+                for band_idx in range(1, num_bands + 1):
+                    reproject(
+                        source=rasterio.band(src, band_idx),
+                        destination=data[band_idx - 1],
+                        src_transform=src.transform,
+                        src_crs=src_crs,
+                        dst_transform=dst_transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.bilinear
+                    )
 
-                    # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
-                    alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
-                    if src.count >= 4:
-                        reproject(
-                            source=rasterio.band(src, 4),
-                            destination=alpha,
-                            src_transform=src.transform,
-                            src_crs=src_crs,
-                            dst_transform=dst_transform,
-                            dst_crs=dst_crs,
-                            resampling=Resampling.nearest
-                        )
-                        print(f"[TILE {z}/{x}/{y}] band4 alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
+                # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
+                alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
+                if src.count >= 4:
+                    reproject(
+                        source=rasterio.band(src, 4),
+                        destination=alpha,
+                        src_transform=src.transform,
+                        src_crs=src_crs,
+                        dst_transform=dst_transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.nearest
+                    )
+                    print(f"[TILE {z}/{x}/{y}] band4 alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
-                    # Fallback if 4th band is empty or unavailable
-                    if alpha.max() == 0:
-                        if num_bands >= 3:
-                            alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
-                        else:
-                            alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
-                        print(f"[TILE {z}/{x}/{y}] fallback alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
+                # Fallback if 4th band is empty or unavailable
+                if alpha.max() == 0:
+                    if num_bands >= 3:
+                        alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
+                    else:
+                        alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+                    print(f"[TILE {z}/{x}/{y}] fallback alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
-                    print(f"[TILE {z}/{x}/{y}] FINAL: R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
-
+                print(f"[TILE {z}/{x}/{y}] FINAL: R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
         # Write PNG tile
         if num_bands >= 3:
