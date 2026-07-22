@@ -775,6 +775,13 @@ export default function App() {
           urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png${urlObj.search}`;
         }
       }
+
+      // If local server is active on localhost:8000, fallback trycloudflare URLs to localhost for 100% reliability
+      if (isServerConnected && urlStr.includes('trycloudflare.com')) {
+        const localHostUrl = urlStr.replace(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/, 'http://localhost:8000');
+        urlStr = localHostUrl;
+        host = 'http://localhost:8000';
+      }
     } catch (e) {
       console.warn('Failed to parse URL template', e);
     }

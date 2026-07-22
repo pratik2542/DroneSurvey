@@ -32,7 +32,7 @@ class ServerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title('DroneSurvey — Local GIS Tile Server & Tunnel')
-        self.root.geometry('720x760')
+        self.root.geometry('740x800')
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
 
@@ -48,7 +48,7 @@ class ServerApp:
 
     def _build_ui(self):
         # Header bar
-        hdr = tk.Frame(self.root, bg=ACCENT, height=64)
+        hdr = tk.Frame(self.root, bg=ACCENT, height=60)
         hdr.pack(fill='x')
         hdr.pack_propagate(False)
         
@@ -57,30 +57,30 @@ class ServerApp:
                  side='left', padx=20, pady=16)
 
         outer = tk.Frame(self.root, bg=BG)
-        outer.pack(fill='both', expand=True, padx=20, pady=16)
+        outer.pack(fill='both', expand=True, padx=16, pady=12)
 
         card = tk.Frame(outer, bg=CARD, relief='flat', bd=0)
         card.pack(fill='both', expand=True, padx=4, pady=4)
 
         # ── Status Card ───────────────────────────────────────────────────
-        status_frame = tk.Frame(card, bg='#141724', padx=16, pady=12)
-        status_frame.pack(fill='x', padx=14, pady=12)
+        status_frame = tk.Frame(card, bg='#141724', padx=14, pady=10)
+        status_frame.pack(fill='x', padx=14, pady=10)
 
-        self.status_dot = tk.Label(status_frame, text='●', font=(FONT, 14), bg='#141724', fg=WARNING)
-        self.status_dot.pack(side='left', padx=(0, 8))
+        self.status_dot = tk.Label(status_frame, text='●', font=(FONT, 12), bg='#141724', fg=WARNING)
+        self.status_dot.pack(side='left', padx=(0, 6))
 
         self.status_lbl = tk.Label(status_frame, text='Starting Local Tile Server (http://localhost:8000)...',
-                                   font=(FONT, 10, 'bold'), bg='#141724', fg=TEXT)
+                                   font=(FONT, 9, 'bold'), bg='#141724', fg=TEXT)
         self.status_lbl.pack(side='left')
 
         # ── Step 1: Select GeoTIFF File ──────────────────────────────────
         tk.Label(card, text='STEP 1 — SELECT LOCAL GEOTIFF (.TIF) FILE ON YOUR PC', font=(FONT, 9, 'bold'),
-                 bg=CARD, fg=ACCENT).pack(anchor='w', padx=16, pady=(4, 4))
+                 bg=CARD, fg=ACCENT).pack(anchor='w', padx=14, pady=(2, 2))
 
         tif_box = tk.Frame(card, bg=BORDER, padx=1, pady=1)
-        tif_box.pack(fill='x', padx=14, pady=(0, 10))
+        tif_box.pack(fill='x', padx=14, pady=(0, 8))
 
-        tif_inner = tk.Frame(tif_box, bg='#141724', padx=12, pady=10)
+        tif_inner = tk.Frame(tif_box, bg='#141724', padx=10, pady=8)
         tif_inner.pack(fill='x')
 
         self.tif_var = tk.StringVar(value='No GeoTIFF file selected yet...')
@@ -91,61 +91,68 @@ class ServerApp:
 
         tk.Button(tif_inner, text='📁 Browse .TIF File...', command=self._browse_tif,
                   font=(FONT, 9, 'bold'), bg=ACCENT, fg='#000000', relief='flat',
-                  padx=12, pady=4, cursor='hand2', activebackground='#0891b2', activeforeground='#ffffff').pack(side='right')
+                  padx=10, pady=4, cursor='hand2', activebackground='#0891b2', activeforeground='#ffffff').pack(side='right')
 
-        # ── Step 2: Public Full Tile URL Section ─────────────────────────
-        tk.Label(card, text='STEP 2 — EXACT TILE URL TO PASTE IN WEB APP', font=(FONT, 9, 'bold'),
-                 bg=CARD, fg=SUCCESS).pack(anchor='w', padx=16, pady=(4, 4))
+        # ── Step 2: Local & Public URL Section ───────────────────────────
+        tk.Label(card, text='STEP 2 — COPY TILE URL & PASTE IN WEB APP', font=(FONT, 9, 'bold'),
+                 bg=CARD, fg=SUCCESS).pack(anchor='w', padx=14, pady=(2, 2))
 
         url_box = tk.Frame(card, bg=BORDER, padx=1, pady=1)
-        url_box.pack(fill='x', padx=14, pady=(0, 10))
+        url_box.pack(fill='x', padx=14, pady=(0, 8))
 
-        url_inner = tk.Frame(url_box, bg='#090b14', padx=12, pady=12)
+        url_inner = tk.Frame(url_box, bg='#090b14', padx=12, pady=10)
         url_inner.pack(fill='x')
 
-        self.url_var = tk.StringVar(value='Generating Cloudflare Tunnel link...')
-        self.url_entry = tk.Entry(url_inner, textvariable=self.url_var, font=('Consolas', 9, 'bold'),
-                                  bg='#090b14', fg=SUCCESS, relief='flat', state='readonly')
-        self.url_entry.pack(fill='x', pady=(0, 8))
+        # Local URL Row (Primary - 100% Reliable)
+        tk.Label(url_inner, text='⚡ LOCAL URL (For this PC - Fast & Never Expires):', font=(FONT, 8, 'bold'), bg='#090b14', fg=SUCCESS).pack(anchor='w')
+        local_row = tk.Frame(url_inner, bg='#090b14')
+        local_row.pack(fill='x', pady=(2, 8))
 
-        btn_row = tk.Frame(url_inner, bg='#090b14')
-        btn_row.pack(fill='x')
+        self.local_url_var = tk.StringVar(value='http://localhost:8000/api/tiles/{z}/{x}/{y}.png')
+        tk.Entry(local_row, textvariable=self.local_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=SUCCESS, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
+        tk.Button(local_row, text='📋 Copy Local URL', command=self._copy_local_url, font=(FONT, 8, 'bold'), bg=SUCCESS, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
 
-        self.copy_btn = tk.Button(btn_row, text='📋   COPY FULL TILE URL TO CLIPBOARD', command=self._copy_url,
-                                  font=(FONT, 10, 'bold'), bg=SUCCESS, fg='#000000', relief='flat',
-                                  padx=16, pady=8, cursor='hand2', activebackground='#059669', activeforeground='#ffffff')
-        self.copy_btn.pack(side='left', padx=(0, 10))
+        # Public Tunnel URL Row (Secondary - For Remote Share)
+        tk.Label(url_inner, text='🌐 PUBLIC TUNNEL URL (For Sharing across Internet):', font=(FONT, 8, 'bold'), bg='#090b14', fg=ACCENT).pack(anchor='w')
+        tunnel_row = tk.Frame(url_inner, bg='#090b14')
+        tunnel_row.pack(fill='x', pady=(2, 6))
 
-        self.open_web_btn = tk.Button(btn_row, text='🌐   OPEN WEB APP', command=self._open_web_app,
-                                      font=(FONT, 10, 'bold'), bg=ACCENT, fg='#000000', relief='flat',
-                                      padx=16, pady=8, cursor='hand2', activebackground='#0891b2', activeforeground='#ffffff')
-        self.open_web_btn.pack(side='left')
+        self.tunnel_url_var = tk.StringVar(value='Generating Cloudflare Tunnel link...')
+        tk.Entry(tunnel_row, textvariable=self.tunnel_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=ACCENT, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
+        tk.Button(tunnel_row, text='📋 Copy Public URL', command=self._copy_tunnel_url, font=(FONT, 8, 'bold'), bg=ACCENT, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
+
+        btn_row = tk.Frame(card, bg=CARD)
+        btn_row.pack(fill='x', padx=14, pady=(0, 8))
+
+        self.open_web_btn = tk.Button(btn_row, text='🌐   OPEN WEB APP (https://gen-lang-client-0025414331.web.app)', command=self._open_web_app,
+                                      font=(FONT, 10, 'bold'), bg=SUCCESS, fg='#000000', relief='flat',
+                                      padx=16, pady=8, cursor='hand2', activebackground='#059669', activeforeground='#ffffff')
+        self.open_web_btn.pack(fill='x')
 
         # ── Live Logs Console ──────────────────────────────────────────────
-        tk.Label(card, text='LIVE SERVER & TUNNEL LOGS', font=(FONT, 9, 'bold'),
-                 bg=CARD, fg=SUBTEXT).pack(anchor='w', padx=16, pady=(6, 4))
+        tk.Label(card, text='LIVE SERVER & TUNNEL LOGS', font=(FONT, 8, 'bold'),
+                 bg=CARD, fg=SUBTEXT).pack(anchor='w', padx=14, pady=(2, 2))
 
         log_wrap = tk.Frame(card, bg='#090b14', padx=1, pady=1)
-        log_wrap.pack(fill='both', expand=True, padx=14, pady=(0, 14))
+        log_wrap.pack(fill='both', expand=True, padx=14, pady=(0, 10))
 
         self.log_box = tk.Text(log_wrap, bg='#090b14', fg=SUCCESS,
                                 font=('Consolas', 8), relief='flat', state='disabled', wrap='word')
         sb = tk.Scrollbar(log_wrap, command=self.log_box.yview)
         self.log_box.configure(yscrollcommand=sb.set)
         sb.pack(side='right', fill='y')
-        self.log_box.pack(fill='both', expand=True, padx=8, pady=8)
+        self.log_box.pack(fill='both', expand=True, padx=6, pady=6)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _find_default_tif(self):
-        # Look for any .tif in uploads or current directory
         uploads = os.path.abspath(os.path.join(os.path.dirname(__file__), 'uploads'))
         if os.path.exists(uploads):
             tifs = [os.path.join(uploads, f) for f in os.listdir(uploads) if f.lower().endswith(('.tif', '.tiff'))]
             if tifs:
                 self.selected_tif_path = tifs[0]
                 self.tif_var.set(self.selected_tif_path)
-                return
+                self._update_full_url()
 
     def _browse_tif(self):
         path = filedialog.askopenfilename(
@@ -158,14 +165,17 @@ class ServerApp:
             self._update_full_url()
 
     def _update_full_url(self):
-        base = self.tunnel_base_url or "http://localhost:8000"
         path = self.tif_var.get().strip()
-        if not path or 'No GeoTIFF' in path:
-            full_url = f"{base}/api/tiles/{{z}}/{{x}}/{{y}}.png"
-        else:
-            full_url = f"{base}/api/tiles/{{z}}/{{x}}/{{y}}.png?filename={path}"
-        
-        self.url_var.set(full_url)
+        query = f"?filename={path}" if (path and 'No GeoTIFF' not in path) else ""
+
+        # Local URL
+        local_full = f"http://localhost:8000/api/tiles/{{z}}/{{x}}/{{y}}.png{query}"
+        self.local_url_var.set(local_full)
+
+        # Tunnel URL
+        if self.tunnel_base_url:
+            tunnel_full = f"{self.tunnel_base_url}/api/tiles/{{z}}/{{x}}/{{y}}.png{query}"
+            self.tunnel_url_var.set(tunnel_full)
 
     def _log(self, msg):
         self.log_box.config(state='normal')
@@ -173,14 +183,20 @@ class ServerApp:
         self.log_box.see('end')
         self.log_box.config(state='disabled')
 
-    def _copy_url(self):
-        url = self.url_var.get()
+    def _copy_local_url(self):
+        url = self.local_url_var.get()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(url)
+        messagebox.showinfo('Copied Local URL!', f'Local Tile URL copied to clipboard!\n\n{url}\n\nPaste under CONNECT TILE SERVER in the web app. Works 100% reliably on this PC!')
+
+    def _copy_tunnel_url(self):
+        url = self.tunnel_url_var.get()
         if not url or 'Generating' in url:
             messagebox.showwarning('Warning', 'Tunnel URL is still generating. Please wait a few seconds!')
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
-        messagebox.showinfo('Copied!', f'Full Tile URL copied to clipboard!\n\n{url}\n\nSimply open the Web App, go to CONNECT TILE SERVER, press Ctrl+V to paste, and click CONNECT!')
+        messagebox.showinfo('Copied Public Tunnel URL!', f'Public Tunnel URL copied to clipboard!\n\n{url}\n\nShare this link with remote users anywhere in the world!')
 
     def _open_web_app(self):
         webbrowser.open(WEB_APP_URL)
@@ -210,6 +226,15 @@ class ServerApp:
         self.root.after(0, lambda: self.status_lbl.config(text="Local Tile Server Active (http://localhost:8000)"))
         self._log("Local Tile Server running successfully at http://localhost:8000")
 
+        # Auto-copy local URL to clipboard first for instant local testing
+        try:
+            local_url = self.local_url_var.get()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(local_url)
+            self.root.after(0, lambda: self._log("📋 Fast Local Tile URL copied to clipboard automatically!"))
+        except Exception:
+            pass
+
         self._log("Requesting Cloudflare Tunnel URL...")
         try:
             self.tunnel_process = subprocess.Popen(
@@ -234,15 +259,6 @@ class ServerApp:
                     self.tunnel_base_url = found_url
                     self.root.after(0, lambda: self._update_full_url())
                     self.root.after(0, lambda u=found_url: self._log(f"✅ PUBLIC TUNNEL READY: {u}"))
-                    
-                    # Auto-copy full URL to clipboard
-                    try:
-                        full_url = self.url_var.get()
-                        self.root.clipboard_clear()
-                        self.root.clipboard_append(full_url)
-                        self.root.after(0, lambda: self._log("📋 Full Tile URL copied to clipboard automatically!"))
-                    except Exception:
-                        pass
         except Exception as e:
             self._log(f"Cloudflare Tunnel Error: {e}")
             self.tunnel_base_url = "http://localhost:8000"
