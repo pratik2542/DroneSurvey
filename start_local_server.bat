@@ -1,9 +1,9 @@
 @echo off
-title DroneSurvey — Local GIS Server ^& Auto Tunnel
+title DroneSurvey — Local GIS Server ^& Tunnel App
 color 0A
 
 echo =======================================================================
-echo          🛰  DroneSurvey Local GIS Server ^& Auto Tunnel
+echo          🛰  DroneSurvey Local GIS Server ^& Tunnel App Launcher
 echo =======================================================================
 echo.
 
@@ -15,12 +15,6 @@ if %errorlevel% neq 0 (
     python -m pip install flask rasterio pillow google-auth requests
 )
 
-:: 2. Launch Local Server in background window
-echo [2/2] Starting Local Tile Server on http://localhost:8000 ...
-start "DroneSurvey Local Backend" /min cmd /c "python server.py"
-
-:: Wait 2 seconds for Flask to boot
-timeout /t 2 /nobreak >nul
-
-:: 3. Launch tunnel & auto-format exact tile URL
-python run_tunnel.py
+:: 2. Launch Local Server Desktop App
+echo [2/2] Launching DroneSurvey Server Desktop App GUI...
+python server_app.py
