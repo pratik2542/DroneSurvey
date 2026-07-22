@@ -263,7 +263,9 @@ if __name__ == '__main__':
 
       // 4. server.py
       const serverPyScript = `from flask import Flask, request, jsonify, send_file
-import os, json, uuid, requests
+import os, io, math, urllib.parse
+import numpy as np
+from PIL import Image
 
 app = Flask(__name__)
 
@@ -274,6 +276,28 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
+_empty_img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+_empty_buf = io.BytesIO()
+_empty_img.save(_empty_buf, format='PNG')
+EMPTY_TILE_BYTES = _empty_buf.getvalue()
+
+RASTER_BOUNDS_CACHE = {}
+
+def get_cached_bounds(filepath):
+    if filepath in RASTER_BOUNDS_CACHE:
+        return RASTER_BOUNDS_CACHE[filepath]
+    import rasterio
+    from rasterio.warp import transform_bounds
+    try:
+        with rasterio.open(filepath) as src:
+            w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+            res = [s, w, n, e]
+            RASTER_BOUNDS_CACHE[filepath] = res
+            return res
+    except Exception as e:
+        print(f"Error reading bounds for {filepath}: {e}")
+        return None
+
 @app.route('/api/surveys', methods=['GET'])
 def get_surveys():
     return jsonify([])
@@ -281,6 +305,112 @@ def get_surveys():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "message": "DroneSurvey Local Server Running"})
+
+@app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
+def serve_tile(z, x, y):
+    import rasterio
+    from rasterio.vrt import WarpedVRT
+    from rasterio.enums import Resampling
+
+    raw_filename = request.args.get('filename')
+    if not raw_filename:
+        return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+    filename = urllib.parse.unquote(raw_filename)
+    if not os.path.exists(filename):
+        norm = os.path.normpath(filename)
+        if os.path.exists(norm):
+            filename = norm
+        else:
+            return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+    try:
+        n_zoom = 2.0 ** z
+        lon_min = x / n_zoom * 360.0 - 180.0
+        lon_max = (x + 1) / n_zoom * 360.0 - 180.0
+        lat_max = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * y / n_zoom))))
+        lat_min = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * (y + 1) / n_zoom))))
+
+        bounds = get_cached_bounds(filename)
+        if bounds:
+            r_lat_min, r_lon_min, r_lat_max, r_lon_max = bounds
+            margin = 0.05
+            if (lat_max < (r_lat_min - margin) or lat_min > (r_lat_max + margin) or
+                lon_max < (r_lon_min - margin) or lon_min > (r_lon_max + margin)):
+                return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+        R = 6378137.0
+        xmin = math.radians(lon_min) * R
+        xmax = math.radians(lon_max) * R
+        ymin = math.log(math.tan(math.pi / 4.0 + math.radians(lat_min) / 2.0)) * R
+        ymax = math.log(math.tan(math.pi / 4.0 + math.radians(lat_max) / 2.0)) * R
+
+        tile_size = 256
+        with rasterio.open(filename) as src:
+            num_bands = min(src.count, 3)
+            with WarpedVRT(src, crs='EPSG:3857', resampling=Resampling.nearest) as vrt:
+                v_left, v_bottom, v_right, v_top = vrt.bounds
+                if xmax < v_left or xmin > v_right or ymax < v_bottom or ymin > v_top:
+                    return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+                inv = ~vrt.transform
+                col1, row1 = inv * (xmin, ymax)
+                col2, row2 = inv * (xmax, ymin)
+
+                col_off = int(round(col1))
+                row_off = int(round(row1))
+                w_pix = max(1, int(round(col2 - col1)))
+                h_pix = max(1, int(round(row2 - row1)))
+
+                vrt_win = rasterio.windows.Window(0, 0, vrt.width, vrt.height)
+                req_win = rasterio.windows.Window(col_off, row_off, w_pix, h_pix)
+
+                try:
+                    overlap_win = req_win.intersection(vrt_win)
+                except Exception:
+                    return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+                dst_col_start = int(round((overlap_win.col_off - col_off) / w_pix * tile_size))
+                dst_row_start = int(round((overlap_win.row_off - row_off) / h_pix * tile_size))
+                dst_w = max(1, int(round(overlap_win.width / w_pix * tile_size)))
+                dst_h = max(1, int(round(overlap_win.height / h_pix * tile_size)))
+
+                dst_col_start = max(0, min(tile_size - 1, dst_col_start))
+                dst_row_start = max(0, min(tile_size - 1, dst_row_start))
+                dst_w = max(1, min(tile_size - dst_col_start, dst_w))
+                dst_h = max(1, min(tile_size - dst_row_start, dst_h))
+
+                sub_data = vrt.read(window=overlap_win, out_shape=(src.count, dst_h, dst_w), resampling=Resampling.nearest)
+                raw_data = np.full((src.count, tile_size, tile_size), 255, dtype=np.uint8)
+                raw_data[:, dst_row_start:dst_row_start+dst_h, dst_col_start:dst_col_start+dst_w] = sub_data
+
+                data = raw_data[:num_bands]
+                alpha = raw_data[3] if src.count >= 4 else np.zeros((tile_size, tile_size), dtype=np.uint8)
+
+                if num_bands >= 3:
+                    is_white = (data[0] == 255) & (data[1] == 255) & (data[2] == 255)
+                    is_black = (data[0] == 0) & (data[1] == 0) & (data[2] == 0)
+                else:
+                    is_white = (data[0] == 255)
+                    is_black = (data[0] == 0)
+
+                if src.count < 4 or alpha.max() == 0:
+                    alpha = np.where(~is_white & ~is_black, 255, 0).astype(np.uint8)
+                else:
+                    alpha[is_white] = 0
+
+        if num_bands >= 3:
+            img = Image.fromarray(np.stack([data[0], data[1], data[2], alpha], axis=2), 'RGBA')
+        else:
+            img = Image.fromarray(np.stack([data[0], data[0], data[0], alpha], axis=2), 'RGBA')
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        print(f"Tile error: {e}")
+        return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
 
 if __name__ == '__main__':
     print("Starting DroneSurvey Local Tile Server on http://localhost:8000 ...")

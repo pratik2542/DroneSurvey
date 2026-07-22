@@ -492,8 +492,16 @@ def serve_tile(z, x, y):
     env_headers = {}
     if gdrive_id:
         source_path, env_headers = get_gdrive_vsicurl_source(gdrive_id)
-    elif filename and os.path.exists(filename):
-        source_path = filename
+    elif filename:
+        unquoted = urllib.parse.unquote(filename)
+        if os.path.exists(unquoted):
+            source_path = unquoted
+        elif os.path.exists(os.path.normpath(unquoted)):
+            source_path = os.path.normpath(unquoted)
+        elif os.path.exists(filename):
+            source_path = filename
+        else:
+            return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
     else:
         return jsonify({'error': 'File not found'}), 404
 
