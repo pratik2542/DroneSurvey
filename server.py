@@ -464,7 +464,7 @@ def serve_tile(z, x, y):
         dst_crs = CRS.from_epsg(3857)
         dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, tile_size, tile_size)
 
-        # 4. Ultra-fast 20ms WarpedVRT window tile rendering
+        # 4. Ultra-fast 20ms WarpedVRT window tile rendering with exact sub-window intersection
         ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
         with ctx:
             with rasterio.open(source_path) as src:
@@ -477,16 +477,35 @@ def serve_tile(z, x, y):
 
                     # Map Mercator bounds to VRT pixel window
                     inv = ~vrt.transform
-                    px_min, py_max = inv * (xmin, ymin)
-                    px_max, py_min = inv * (xmax, ymax)
+                    col1, row1 = inv * (xmin, ymax)
+                    col2, row2 = inv * (xmax, ymin)
 
-                    col_off = max(0, int(round(px_min)))
-                    row_off = max(0, int(round(py_min)))
-                    w_pix = max(1, int(round(px_max - px_min)))
-                    h_pix = max(1, int(round(py_max - py_min)))
+                    col_off = int(round(col1))
+                    row_off = int(round(row1))
+                    w_pix = max(1, int(round(col2 - col1)))
+                    h_pix = max(1, int(round(row2 - row1)))
 
-                    window = rasterio.windows.Window(col_off, row_off, w_pix, h_pix)
-                    raw_data = vrt.read(window=window, out_shape=(src.count, tile_size, tile_size), resampling=Resampling.nearest)
+                    vrt_win = rasterio.windows.Window(0, 0, vrt.width, vrt.height)
+                    req_win = rasterio.windows.Window(col_off, row_off, w_pix, h_pix)
+
+                    try:
+                        overlap_win = req_win.intersection(vrt_win)
+                    except Exception:
+                        return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+                    dst_col_start = int(round((overlap_win.col_off - col_off) / w_pix * tile_size))
+                    dst_row_start = int(round((overlap_win.row_off - row_off) / h_pix * tile_size))
+                    dst_w = max(1, int(round(overlap_win.width / w_pix * tile_size)))
+                    dst_h = max(1, int(round(overlap_win.height / h_pix * tile_size)))
+
+                    dst_col_start = max(0, min(tile_size - 1, dst_col_start))
+                    dst_row_start = max(0, min(tile_size - 1, dst_row_start))
+                    dst_w = max(1, min(tile_size - dst_col_start, dst_w))
+                    dst_h = max(1, min(tile_size - dst_row_start, dst_h))
+
+                    sub_data = vrt.read(window=overlap_win, out_shape=(src.count, dst_h, dst_w), resampling=Resampling.nearest)
+                    raw_data = np.full((src.count, tile_size, tile_size), 255, dtype=np.uint8)
+                    raw_data[:, dst_row_start:dst_row_start+dst_h, dst_col_start:dst_col_start+dst_w] = sub_data
 
                     data = raw_data[:num_bands]
                     alpha = raw_data[3] if src.count >= 4 else np.zeros((tile_size, tile_size), dtype=np.uint8)
