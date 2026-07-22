@@ -245,7 +245,10 @@ def convert_to_cog(input_path, output_path):
 
 # Helper to build vsicurl source path + headers for Google Drive direct cloud streaming
 def get_gdrive_vsicurl_source(file_id):
-    headers = {}
+    headers = {
+        'GDAL_DISABLE_READDIR_ON_OPEN': 'EMPTY_DIR',
+        'CPL_VSIL_CURL_ALLOWED_EXTENSIONS': 'tif,tiff,cog'
+    }
     if GDRIVE_SA_CREDS:
         try:
             from google.auth.transport.requests import Request
@@ -261,6 +264,7 @@ def get_gdrive_vsicurl_source(file_id):
     # Fallback for public drive files
     pub_url = f"https://drive.google.com/uc?export=download&id={file_id}"
     return f"/vsicurl/{pub_url}", headers
+
 
 # Asynchronous Background Caching & Processing Thread
 def process_survey_async(survey_doc):
@@ -404,12 +408,13 @@ def serve_tile(z, x, y):
         lat_max = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * y / n_zoom))))
         lat_min = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * (y + 1) / n_zoom))))
 
-        # 2. Instant bounding box overlap check — skip 95% of non-overlapping map tiles in 0.1ms
+        # 2. Instant bounding box overlap check with 0.05° margin buffer
         raster_bounds = get_cached_raster_wgs84_bounds(source_path, env_headers)
         if raster_bounds:
             r_lat_min, r_lon_min, r_lat_max, r_lon_max = raster_bounds
-            if (lat_max < r_lat_min or lat_min > r_lat_max or
-                lon_max < r_lon_min or lon_min > r_lon_max):
+            margin = 0.05  # ~5 km buffer margin so boundary tiles are never clipped
+            if (lat_max < (r_lat_min - margin) or lat_min > (r_lat_max + margin) or
+                lon_max < (r_lon_min - margin) or lon_min > (r_lon_max + margin)):
                 return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
 
         # 3. Convert tile lat/lon to Web Mercator EPSG:3857 bounds
@@ -428,6 +433,7 @@ def serve_tile(z, x, y):
             ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
             with ctx:
                 with rasterio.open(source_path) as src:
+                    src_crs = src.crs if src.crs else CRS.from_epsg(4326)
                     num_bands = min(src.count, 3)
                     data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
@@ -436,13 +442,30 @@ def serve_tile(z, x, y):
                             source=rasterio.band(src, band_idx),
                             destination=data[band_idx - 1],
                             src_transform=src.transform,
-                            src_crs=src.crs,
+                            src_crs=src_crs,
                             dst_transform=dst_transform,
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
 
-                    alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+                    # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
+                    if src.count >= 4:
+                        alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
+                        reproject(
+                            source=rasterio.band(src, 4),
+                            destination=alpha,
+                            src_transform=src.transform,
+                            src_crs=src_crs,
+                            dst_transform=dst_transform,
+                            dst_crs=dst_crs,
+                            resampling=Resampling.nearest
+                        )
+                    else:
+                        # Combine RGB channels so dark ground/pixels remain visible
+                        if num_bands >= 3:
+                            alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
+                        else:
+                            alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
 
         # Write PNG tile
         if num_bands >= 3:
@@ -454,6 +477,7 @@ def serve_tile(z, x, y):
         img.save(buf, format='PNG')
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
+
 
     except Exception as e:
         print(f"Tile error z={z} x={x} y={y}: {e}")
