@@ -436,9 +436,8 @@ def serve_tile(z, x, y):
                 with rasterio.open(source_path) as src:
                     src_crs = src.crs if src.crs else CRS.from_epsg(4326)
                     num_bands = min(src.count, 3)
+                    print(f"[TILE {z}/{x}/{y}] opened {source_path[-40:]} bands={src.count} crs={src.crs} nodata={src.nodata} dtype={src.dtypes[0]}")
                     data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
-
-                    print(f"TILE z={z} x={x} y={y}: src.crs={src.crs} bands={src.count} dtype={src.dtypes[0]} bounds={src.bounds}")
 
                     for band_idx in range(1, num_bands + 1):
                         reproject(
@@ -450,8 +449,6 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
-
-                    print(f"TILE z={z} x={x} y={y}: data[0].max={data[0].max()} data[0].min={data[0].min()}")
 
                     # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
                     alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
@@ -465,7 +462,6 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
-                        print(f"TILE z={z} x={x} y={y}: alpha(band4).max={alpha.max()}")
 
                     # Fallback if 4th band is empty or unavailable
                     if alpha.max() == 0:
@@ -473,9 +469,9 @@ def serve_tile(z, x, y):
                             alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
                         else:
                             alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
-                        print(f"TILE z={z} x={x} y={y}: alpha(fallback).max={alpha.max()}")
 
-        print(f"TILE z={z} x={x} y={y}: FINAL alpha.max={alpha.max()} num_bands={num_bands}")
+                    print(f"[TILE {z}/{x}/{y}] data max R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
+
 
         # Write PNG tile
         if num_bands >= 3:
@@ -490,8 +486,52 @@ def serve_tile(z, x, y):
 
 
     except Exception as e:
+        import traceback
         print(f"Tile error z={z} x={x} y={y}: {e}")
+        traceback.print_exc()
         return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
+
+
+@app.route('/api/debug-tile', methods=['GET'])
+def debug_tile():
+    """Debug endpoint: tests vsicurl open and reads a tile at a given zoom to diagnose empty tiles."""
+    import rasterio
+    from rasterio.warp import transform_bounds
+    gdrive_id = request.args.get('gdrive_id')
+    filename  = request.args.get('filename')
+
+    env_headers = {}
+    if gdrive_id:
+        source_path, env_headers = get_gdrive_vsicurl_source(gdrive_id)
+    elif filename and os.path.exists(filename):
+        source_path = filename
+    else:
+        return jsonify({'error': 'No file or gdrive_id provided'}), 400
+
+    try:
+        ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
+        with ctx:
+            with rasterio.open(source_path) as src:
+                w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+                band1_sample = src.read(1, window=rasterio.windows.Window(0, 0, 64, 64))
+                return jsonify({
+                    'status': 'ok',
+                    'source': source_path[-60:],
+                    'bands': src.count,
+                    'crs': str(src.crs),
+                    'nodata': src.nodata,
+                    'dtype': str(src.dtypes[0]),
+                    'width': src.width,
+                    'height': src.height,
+                    'bounds_wgs84': {'west': w, 'south': s, 'east': e, 'north': n},
+                    'band1_sample_max': int(band1_sample.max()),
+                    'band1_sample_min': int(band1_sample.min()),
+                    'band1_sample_mean': float(band1_sample.mean()),
+                    'env_headers_keys': list(env_headers.keys())
+                })
+    except Exception as e:
+        import traceback
+        return jsonify({'status': 'error', 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
 @app.route('/api/bounds', methods=['GET'])
