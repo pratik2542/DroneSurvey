@@ -563,12 +563,14 @@ export default function App() {
     
     let urlStr = tileUrlTemplate.trim();
     let filename = '';
+    let gdrive_id = '';
     let host = '';
 
     // Auto-detect and rewrite main page localtileserver URLs to Leaflet XYZ template format
     try {
       const urlObj = new URL(urlStr);
       filename = urlObj.searchParams.get('filename') || '';
+      gdrive_id = urlObj.searchParams.get('gdrive_id') || '';
       host = urlObj.origin;
       
       if ((urlObj.pathname === '/' || urlObj.pathname === '') && filename) {
@@ -578,19 +580,32 @@ export default function App() {
       console.warn('Failed to parse URL template', e);
     }
 
-    // Auto-fetch bounds from localtileserver if no bounds are specified manually
+    // Auto-fetch bounds from tile server if no bounds are specified manually
     let boundsToUse = parsedBounds;
-    if (!boundsToUse && host && filename) {
+    if (!boundsToUse && (filename || gdrive_id)) {
       try {
-        const boundsUrl = getBackendUrl(`/api/bounds?filename=${encodeURIComponent(filename)}`);
-        const response = await fetch(boundsUrl, {
-          headers: getBackendHeaders(host ? { 'x-target-host': host } : {})
-        });
+        const param = filename ? `filename=${encodeURIComponent(filename)}` : `gdrive_id=${gdrive_id}`;
+        let boundsUrl = '';
+        if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
+          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+          boundsUrl = `${cleanHost}/api/bounds?${param}`;
+        } else {
+          boundsUrl = getBackendUrl(`/api/bounds?${param}`);
+        }
+
+        const response = await fetch(boundsUrl);
         if (response.ok) {
           const data = await response.json();
           const b = data.bounds || data;
           
-          if (b.left !== undefined && b.bottom !== undefined && b.right !== undefined && b.top !== undefined) {
+          if (b.south !== undefined && b.west !== undefined && b.north !== undefined && b.east !== undefined) {
+            boundsToUse = [
+              parseFloat(b.south),
+              parseFloat(b.west),
+              parseFloat(b.north),
+              parseFloat(b.east)
+            ];
+          } else if (b.left !== undefined && b.bottom !== undefined && b.right !== undefined && b.top !== undefined) {
             // localtileserver format: left, bottom, right, top -> [south, west, north, east]
             boundsToUse = [
               parseFloat(b.bottom),
