@@ -261,12 +261,13 @@ def get_gdrive_vsicurl_source(file_id):
     headers = {
         'GDAL_DISABLE_READDIR_ON_OPEN': 'EMPTY_DIR',
         'CPL_VSIL_CURL_USE_HEAD': 'NO',
+        'GDAL_HTTP_MULTIRANGE': 'NO',
         'GDAL_HTTP_MAX_RETRY': '10',
         'GDAL_HTTP_RETRY_DELAY': '1',
         'GDAL_HTTP_TIMEOUT': '30',
         'VSI_CACHE': 'TRUE',
-        'VSI_CACHE_SIZE': '50000000',
-        'CPL_VSIL_CURL_CHUNK_SIZE': '524288'
+        'VSI_CACHE_SIZE': '100000000',
+        'CPL_VSIL_CURL_CHUNK_SIZE': '65536'
     }
     if GDRIVE_SA_CREDS:
         try:
@@ -473,28 +474,39 @@ def serve_tile(z, x, y):
                 data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
                 for band_idx in range(1, num_bands + 1):
-                    reproject(
-                        source=rasterio.band(src, band_idx),
-                        destination=data[band_idx - 1],
-                        src_transform=src.transform,
-                        src_crs=src_crs,
-                        dst_transform=dst_transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling.bilinear
-                    )
+                    for attempt in range(2):
+                        try:
+                            reproject(
+                                source=rasterio.band(src, band_idx),
+                                destination=data[band_idx - 1],
+                                src_transform=src.transform,
+                                src_crs=src_crs,
+                                dst_transform=dst_transform,
+                                dst_crs=dst_crs,
+                                resampling=Resampling.bilinear
+                            )
+                            break
+                        except Exception as retry_err:
+                            if attempt == 1:
+                                print(f"[REPROJECT WARN] Band {band_idx} tile read fallback: {retry_err}")
 
                 # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
                 alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
                 if src.count >= 4:
-                    reproject(
-                        source=rasterio.band(src, 4),
-                        destination=alpha,
-                        src_transform=src.transform,
-                        src_crs=src_crs,
-                        dst_transform=dst_transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling.nearest
-                    )
+                    for attempt in range(2):
+                        try:
+                            reproject(
+                                source=rasterio.band(src, 4),
+                                destination=alpha,
+                                src_transform=src.transform,
+                                src_crs=src_crs,
+                                dst_transform=dst_transform,
+                                dst_crs=dst_crs,
+                                resampling=Resampling.nearest
+                            )
+                            break
+                        except Exception:
+                            pass
 
                 # Detect pure white (255,255,255) and pure black (0,0,0) border fill pixels
                 if num_bands >= 3:
