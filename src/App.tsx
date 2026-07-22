@@ -7,6 +7,7 @@ import LayersPanel from './components/LayersPanel';
 import FeatureList from './components/FeatureList';
 import FeatureDetails from './components/FeatureDetails';
 import AttributeTable from './components/AttributeTable';
+import { LocalServerSetupModal } from './components/LocalServerSetupModal';
 import { 
   Upload, 
   Map, 
@@ -24,7 +25,8 @@ import {
   ShieldCheck,
   Plus,
   Trash2,
-  Folder
+  Folder,
+  Zap
 } from 'lucide-react';
 
 const SAMPLE_KML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -192,6 +194,36 @@ export default function App() {
   const [adminType, setAdminType] = useState<'raster' | 'vector'>('raster');
   const [adminDescription, setAdminDescription] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Server Setup Modal & Connection States
+  const [isServerSetupModalOpen, setIsServerSetupModalOpen] = useState(false);
+  const [isServerConnected, setIsServerConnected] = useState(false);
+
+  // Check Local Server Connection Health
+  const checkServerHealth = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(getBackendUrl('/api/surveys'), {
+        headers: getBackendHeaders()
+      });
+      if (response.ok) {
+        setIsServerConnected(true);
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    setIsServerConnected(false);
+    return false;
+  };
+
+  // Poll Local Server Health Every 10 Seconds
+  useEffect(() => {
+    checkServerHealth();
+    const interval = setInterval(() => {
+      checkServerHealth();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Hosted Surveys Catalog State
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -856,7 +888,7 @@ export default function App() {
   };
 
   // Handle file uploads (kmz, kml, zip, tif, tiff)
-  const processUploadedFiles = async (files: FileList) => {
+  const processUploadedFiles = async (files: FileList | File[]) => {
     setLoading(true);
     setErrorMsg(null);
     
@@ -1045,6 +1077,21 @@ export default function App() {
 
         {/* Quick controls */}
         <div className="flex items-center space-x-2">
+          {/* Local Server & Tools Download Button */}
+          <button
+            onClick={() => setIsServerSetupModalOpen(true)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 border shadow-sm cursor-pointer ${
+              isServerConnected 
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
+                : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
+            }`}
+            title="Download Local Server & Converter Tools, or check connectivity"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Local Tools & Server</span>
+            <span className={`w-2 h-2 rounded-full ${isServerConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+          </button>
+
           {layers.length === 0 && (
             <button
               onClick={loadSampleData}
@@ -1604,6 +1651,14 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Local Server & Converter Setup Modal */}
+      <LocalServerSetupModal
+        isOpen={isServerSetupModalOpen}
+        onClose={() => setIsServerSetupModalOpen(false)}
+        isServerConnected={isServerConnected}
+        serverUrl={localStorage.getItem('connected_tile_host') || 'http://localhost:8000'}
+        onCheckConnection={checkServerHealth}
+      />
     </div>
   );
 }
