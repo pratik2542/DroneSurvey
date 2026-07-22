@@ -387,17 +387,34 @@ export default function App() {
         setIsFolderFetching(true);
         const param = `url=${encodeURIComponent(input)}`;
         
-        let host = '';
-        try {
-          if (tileUrlTemplate.trim()) {
-            host = new URL(tileUrlTemplate.trim()).origin;
-          }
-        } catch (e) {}
+        const getConnectedHost = (): string => {
+          try {
+            if (tileUrlTemplate.trim()) {
+              const u = new URL(tileUrlTemplate.trim());
+              if (u.origin && (u.origin.startsWith('http://') || u.origin.startsWith('https://'))) {
+                return u.origin.endsWith('/') ? u.origin.slice(0, -1) : u.origin;
+              }
+            }
+          } catch (e) {}
 
+          const saved = localStorage.getItem('connected_tile_host');
+          if (saved && (saved.startsWith('http://') || saved.startsWith('https://'))) {
+            return saved.endsWith('/') ? saved.slice(0, -1) : saved;
+          }
+
+          if (window.location.origin && (window.location.origin.startsWith('http://') || window.location.origin.startsWith('https://'))) {
+            if (window.location.origin.includes(':8000') || window.location.origin.includes('trycloudflare.com')) {
+              return window.location.origin.endsWith('/') ? window.location.origin.slice(0, -1) : window.location.origin;
+            }
+          }
+
+          return '';
+        };
+
+        const activeHost = getConnectedHost();
         const candidates = [];
-        if (host && host.startsWith('http')) {
-          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
-          candidates.push(`${cleanHost}/api/gdrive-folder-files?${param}`);
+        if (activeHost) {
+          candidates.push(`${activeHost}/api/gdrive-folder-files?${param}`);
         }
         candidates.push(`http://localhost:8000/api/gdrive-folder-files?${param}`);
         candidates.push(getBackendUrl(`/api/gdrive-folder-files?${param}`));
@@ -414,7 +431,11 @@ export default function App() {
         }
 
         if (!res) {
-          throw new Error('Local server is not running on http://localhost:8000. Please double-click start_local_server.bat on your PC to inspect Google Drive folders, or download the KMZ file to your PC and use the LOCAL tab!');
+          throw new Error(
+            activeHost
+              ? `Could not reach server at ${activeHost}. Please verify that start_local_server.bat is running on your PC!`
+              : 'No connected tile server host found. Please paste your server URL under CONNECT TILE SERVER first!'
+          );
         }
 
         const data = await res.json();
@@ -684,6 +705,11 @@ export default function App() {
       gdrive_id = urlObj.searchParams.get('gdrive_id') || '';
       host = urlObj.origin;
       
+      if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
+        const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+        localStorage.setItem('connected_tile_host', cleanHost);
+      }
+
       if ((urlObj.pathname === '/' || urlObj.pathname === '') && filename) {
         urlStr = `${host}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
       }
