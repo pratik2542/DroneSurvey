@@ -569,10 +569,10 @@ if __name__ == '__main__':
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-end shrink-0">
               <button
                 onClick={handleTestServer}
-                className="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-1.5"
+                className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${testStatus === 'checking' ? 'animate-spin' : ''}`} />
                 <span>Test</span>
@@ -580,10 +580,17 @@ if __name__ == '__main__':
               <button
                 onClick={handleDownloadZipPackage}
                 disabled={isZipping}
-                className="px-3 sm:px-4 py-2 rounded-xl text-xs font-medium text-slate-900 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 font-semibold shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-medium text-slate-900 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 font-semibold shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Download className="w-4 h-4" />
-                <span>{isZipping ? 'Creating...' : 'Download Setup Package (.zip)'}</span>
+                <span>
+                  {isZipping ? 'Creating...' : (
+                    <>
+                      <span className="hidden sm:inline">Download Setup Package (.zip)</span>
+                      <span className="sm:hidden">Download Package (.zip)</span>
+                    </>
+                  )}
+                </span>
               </button>
             </div>
           </div>
@@ -597,32 +604,32 @@ if __name__ == '__main__':
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-900/50 px-3 sm:px-6 overflow-x-auto custom-scrollbar shrink-0">
+        <div className="flex border-b border-slate-800 bg-slate-900/50 px-2 sm:px-6 overflow-x-auto custom-scrollbar shrink-0">
           <button
             onClick={() => setActiveTab('quickstart')}
-            className={`px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'quickstart' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            className={`px-3 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${activeTab === 'quickstart' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
           >
-            <Server className="w-4 h-4" />
-            1-Click Quickstart Guide
+            <Server className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>1-Click Quickstart Guide</span>
           </button>
           <button
             onClick={() => setActiveTab('converter')}
-            className={`px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'converter' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            className={`px-3 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${activeTab === 'converter' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
           >
-            <Cpu className="w-4 h-4" />
-            Offline GeoTIFF Converter Tool
+            <Cpu className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Offline Converter Tool</span>
           </button>
           <button
             onClick={() => setActiveTab('troubleshoot')}
-            className={`px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'troubleshoot' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            className={`px-3 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${activeTab === 'troubleshoot' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
           >
-            <FileCode2 className="w-4 h-4" />
-            CORS & Tunneling Help
+            <FileCode2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>CORS & Tunneling</span>
           </button>
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-6 space-y-6 max-h-[50vh] overflow-y-auto custom-scrollbar">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-h-[60vh] sm:max-h-[50vh] overflow-y-auto custom-scrollbar">
           {activeTab === 'quickstart' && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">

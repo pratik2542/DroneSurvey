@@ -231,14 +231,21 @@ export default function App() {
   // Fetch Cloud Catalog on Mount
   useEffect(() => {
     const fetchCatalog = async () => {
+      const isSample = (item: any) =>
+        item.id === 'sf-sample-kml' ||
+        item.id === 'keshav-dsm-tiff' ||
+        (item.name && (item.name.includes('San Francisco') || item.name.includes('Keshav Site')));
+
       try {
         const response = await fetch(getBackendUrl('/api/surveys'), {
           headers: getBackendHeaders()
         });
         if (response.ok) {
           const data = await response.json();
-          setCatalog(data);
-          return;
+          if (Array.isArray(data)) {
+            setCatalog(data.filter((item: any) => !isSample(item)));
+            return;
+          }
         }
       } catch (e) {
         console.warn('Backend API offline, falling back to public/surveys.json:', e);
@@ -248,7 +255,9 @@ export default function App() {
         const response = await fetch('/surveys.json');
         if (response.ok) {
           const data = await response.json();
-          setCatalog(data);
+          if (Array.isArray(data)) {
+            setCatalog(data.filter((item: any) => !isSample(item)));
+          }
         }
       } catch (e) {
         console.warn('Failed to load surveys catalog:', e);
