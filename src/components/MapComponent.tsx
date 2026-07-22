@@ -229,14 +229,23 @@ export default function MapComponent({
       // Handle custom tile layers
       if (layer.tileUrl) {
         if (isNewLayer) {
-          const tileLayer = L.tileLayer(layer.tileUrl, {
+          const tileOptions: L.TileLayerOptions = {
             maxZoom: 22,
-            opacity: 0.85,
-          });
+            maxNativeZoom: 20,
+            opacity: 1.0,
+          };
+          if (layer.bounds) {
+            const [south, west, north, east] = layer.bounds;
+            const b = L.latLngBounds([south, west], [north, east]);
+            if (b.isValid()) {
+              tileOptions.bounds = b;
+            }
+          }
+          const tileLayer = L.tileLayer(layer.tileUrl, tileOptions);
           leafletLayersRef.current[layer.id] = tileLayer as any;
           tileLayer.addTo(map);
         }
-        
+
         // If it is a new layer, has bounds, and we haven't zoomed to it yet, fly to it
         if (isNewLayer && layer.bounds && !zoomedLayerIdsRef.current.has(layer.id)) {
           zoomedLayerIdsRef.current.add(layer.id);
@@ -244,7 +253,7 @@ export default function MapComponent({
             const [south, west, north, east] = layer.bounds;
             const bounds = L.latLngBounds([south, west], [north, east]);
             if (bounds.isValid()) {
-              map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5 });
+              map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 18, duration: 1.5 });
             }
           } catch (e) {
             console.warn('Failed to fly to bounds for new tile layer', e);
@@ -252,6 +261,7 @@ export default function MapComponent({
         }
         return;
       }
+
 
       const prevColor = drawnLayerColorsRef.current[layer.id];
       const colorChanged = prevColor && prevColor !== layer.color;

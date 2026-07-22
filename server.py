@@ -450,8 +450,8 @@ def serve_tile(z, x, y):
                         )
 
                     # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
+                    alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
                     if src.count >= 4:
-                        alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
                         reproject(
                             source=rasterio.band(src, 4),
                             destination=alpha,
@@ -461,12 +461,14 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
-                    else:
-                        # Combine RGB channels so dark ground/pixels remain visible
+
+                    # Fallback if 4th band is empty or unavailable
+                    if alpha.max() == 0:
                         if num_bands >= 3:
                             alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
                         else:
                             alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+
 
         # Write PNG tile
         if num_bands >= 3:
