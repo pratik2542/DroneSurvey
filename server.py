@@ -360,7 +360,8 @@ def get_cached_raster_wgs84_bounds(filepath, env_headers=None):
         with ctx:
             with rasterio.open(filepath) as src:
                 w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-                res = (s, n, w, e)  # minLat, maxLat, minLng, maxLng
+                # w=west, s=south, e=east, n=north -> [south, west, north, east]
+                res = [s, w, n, e]
                 RASTER_BOUNDS_CACHE[filepath] = res
                 return res
     except Exception as e:
@@ -406,7 +407,7 @@ def serve_tile(z, x, y):
         # 2. Instant bounding box overlap check — skip 95% of non-overlapping map tiles in 0.1ms
         raster_bounds = get_cached_raster_wgs84_bounds(source_path, env_headers)
         if raster_bounds:
-            r_lat_min, r_lat_max, r_lon_min, r_lon_max = raster_bounds
+            r_lat_min, r_lon_min, r_lat_max, r_lon_max = raster_bounds
             if (lat_max < r_lat_min or lat_min > r_lat_max or
                 lon_max < r_lon_min or lon_min > r_lon_max):
                 return send_file(io.BytesIO(EMPTY_TILE_BYTES), mimetype='image/png')
@@ -478,17 +479,22 @@ def get_bounds():
         if not bounds:
             return jsonify({'error': 'Failed to read bounds'}), 500
 
-        minlat, maxlat, minlon, maxlon = bounds
+        south, west, north, east = bounds
         return jsonify({
             'bounds': {
-                'left': minlon,
-                'bottom': minlat,
-                'right': maxlon,
-                'top': maxlat
+                'south': south,
+                'west': west,
+                'north': north,
+                'east': east,
+                'bottom': south,
+                'left': west,
+                'top': north,
+                'right': east
             }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 
