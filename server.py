@@ -422,6 +422,7 @@ def serve_tile(z, x, y):
     import numpy as np
     import rasterio
     from rasterio.warp import reproject, Resampling
+    from rasterio.vrt import WarpedVRT
     from rasterio.crs import CRS
 
     gdrive_id = request.args.get('gdrive_id')
@@ -460,53 +461,27 @@ def serve_tile(z, x, y):
         ymax = math.log(math.tan(math.pi / 4.0 + math.radians(lat_max) / 2.0)) * R
 
         tile_size = 256
-        dst_crs = CRS.from_epsg(3857)
-        dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, tile_size, tile_size)
 
-        # 4. GDAL reprojection — rasterio reads are thread-safe, no global lock needed
+        # 4. Fast WarpedVRT tile rendering (automatically selects matching pyramid overview level)
         ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
         with ctx:
             with rasterio.open(source_path) as src:
-                src_crs = src.crs if src.crs else CRS.from_epsg(4326)
                 num_bands = min(src.count, 3)
-                overviews = src.overviews(1)
-                print(f"[TILE {z}/{x}/{y}] src bands={src.count} crs={src.crs} overviews={overviews} size={src.width}x{src.height}")
-                data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
+                with WarpedVRT(src, crs='EPSG:3857', resampling=Resampling.nearest) as vrt:
+                    inv = ~vrt.transform
+                    px_min, py_max = inv * (xmin, ymin)
+                    px_max, py_min = inv * (xmax, ymax)
 
-                for band_idx in range(1, num_bands + 1):
-                    for attempt in range(2):
-                        try:
-                            reproject(
-                                source=rasterio.band(src, band_idx),
-                                destination=data[band_idx - 1],
-                                src_transform=src.transform,
-                                src_crs=src_crs,
-                                dst_transform=dst_transform,
-                                dst_crs=dst_crs,
-                                resampling=Resampling.bilinear
-                            )
-                            break
-                        except Exception as retry_err:
-                            if attempt == 1:
-                                print(f"[REPROJECT WARN] Band {band_idx} tile read fallback: {retry_err}")
+                    col_off = int(round(px_min))
+                    row_off = int(round(py_min))
+                    w_pix = max(1, int(round(px_max - px_min)))
+                    h_pix = max(1, int(round(py_max - py_min)))
 
-                # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
-                alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
-                if src.count >= 4:
-                    for attempt in range(2):
-                        try:
-                            reproject(
-                                source=rasterio.band(src, 4),
-                                destination=alpha,
-                                src_transform=src.transform,
-                                src_crs=src_crs,
-                                dst_transform=dst_transform,
-                                dst_crs=dst_crs,
-                                resampling=Resampling.nearest
-                            )
-                            break
-                        except Exception:
-                            pass
+                    window = rasterio.windows.Window(col_off, row_off, w_pix, h_pix)
+                    raw_data = vrt.read(window=window, out_shape=(src.count, tile_size, tile_size), resampling=Resampling.nearest)
+
+                    data = raw_data[:num_bands]
+                    alpha = raw_data[3] if src.count >= 4 else np.zeros((tile_size, tile_size), dtype=np.uint8)
 
                 # Detect pure white (255,255,255) and pure black (0,0,0) border fill pixels
                 if num_bands >= 3:
@@ -520,7 +495,6 @@ def serve_tile(z, x, y):
                 if src.count < 4 or alpha.max() == 0:
                     alpha = np.where(~is_white_border & ~is_black_border, 255, 0).astype(np.uint8)
                 else:
-                    # Cleanly set white border fill pixels to transparent
                     alpha[is_white_border] = 0
 
                 print(f"[TILE {z}/{x}/{y}] FINAL: R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
