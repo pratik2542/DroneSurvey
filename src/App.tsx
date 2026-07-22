@@ -776,8 +776,8 @@ export default function App() {
         }
       }
 
-      // If local server is active on localhost:8000, fallback trycloudflare URLs to localhost for 100% reliability
-      if (isServerConnected && urlStr.includes('trycloudflare.com')) {
+      // Only rewrite trycloudflare to http://localhost:8000 if the current web app is NOT running on HTTPS (prevents Mixed Content blocking)
+      if (window.location.protocol !== 'https:' && isServerConnected && urlStr.includes('trycloudflare.com')) {
         const localHostUrl = urlStr.replace(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/, 'http://localhost:8000');
         urlStr = localHostUrl;
         host = 'http://localhost:8000';

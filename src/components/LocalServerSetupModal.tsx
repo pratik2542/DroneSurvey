@@ -300,13 +300,21 @@ def get_cached_bounds(filepath):
     if filepath in RASTER_BOUNDS_CACHE:
         return RASTER_BOUNDS_CACHE[filepath]
     import rasterio
+    from rasterio.vrt import WarpedVRT
     from rasterio.warp import transform_bounds
     try:
         with rasterio.open(filepath) as src:
-            w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-            res = [s, w, n, e]
-            RASTER_BOUNDS_CACHE[filepath] = res
-            return res
+            try:
+                with WarpedVRT(src, crs='EPSG:4326') as vrt:
+                    w, s, e, n = vrt.bounds
+                    res = [float(s), float(w), float(n), float(e)]
+                    RASTER_BOUNDS_CACHE[filepath] = res
+                    return res
+            except Exception:
+                w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+                res = [float(s), float(w), float(n), float(e)]
+                RASTER_BOUNDS_CACHE[filepath] = res
+                return res
     except Exception as e:
         print(f"Error reading bounds for {filepath}: {e}")
         return None
@@ -341,7 +349,11 @@ def get_bounds_endpoint():
             'bounds': {'south': s, 'west': w, 'north': n, 'east': e},
             'left': w, 'bottom': s, 'right': e, 'top': n
         })
-    return jsonify({'error': 'Failed to read bounds'}), 500
+    return jsonify({
+        'status': 'warning',
+        'bounds': {'south': -85.0, 'west': -180.0, 'north': 85.0, 'east': 180.0},
+        'left': -180.0, 'bottom': -85.0, 'right': 180.0, 'top': 85.0
+    }), 200
 
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
 def serve_tile(z, x, y):
