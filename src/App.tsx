@@ -1077,7 +1077,7 @@ export default function App() {
       <main className="flex-1 flex flex-col lg:flex-row min-h-0 w-full relative overflow-hidden">
         
         {/* Left Control Rail (Responsive Drawer) */}
-        <div className={`fixed inset-y-0 left-0 z-[1100] w-80 max-w-[85vw] flex flex-col p-4 space-y-4 border-r border-high-border bg-high-darker transition-transform duration-300 transform lg:relative lg:translate-x-0 lg:z-0 lg:shadow-none lg:w-80 lg:max-w-none lg:h-full lg:overflow-y-auto ${
+        <div className={`fixed inset-y-0 left-0 z-[1100] w-80 max-w-[88vw] flex flex-col p-3 sm:p-4 space-y-3 sm:space-y-4 border-r border-high-border bg-high-darker transition-transform duration-300 transform overflow-y-auto custom-scrollbar lg:relative lg:translate-x-0 lg:z-0 lg:shadow-none lg:w-80 lg:max-w-none lg:h-full ${
           mobileLeftPanelOpen ? 'translate-x-0' : '-translate-x-full'
         }`}>
           {/* Mobile Drawer Header */}
