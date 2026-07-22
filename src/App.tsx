@@ -23,7 +23,8 @@ import {
   X,
   ShieldCheck,
   Plus,
-  Trash2
+  Trash2,
+  Folder
 } from 'lucide-react';
 
 const SAMPLE_KML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -179,6 +180,11 @@ export default function App() {
   // Importer Tab & URL States
   const [uploadTab, setUploadTab] = useState<'local' | 'url' | 'admin' | 'help'>('local');
   const [urlInput, setUrlInput] = useState('');
+
+  // Google Drive Folder KMZ Selector States
+  const [folderFiles, setFolderFiles] = useState<Array<{ id: string; name: string; size?: number; mimeType?: string; downloadUrl?: string }>>([]);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [isFolderFetching, setIsFolderFetching] = useState(false);
 
   // Admin Panel States
   const [adminName, setAdminName] = useState('');
@@ -387,6 +393,34 @@ export default function App() {
     setErrorMsg(null);
 
     const input = urlInput.trim();
+
+    // 1. Inspect if user pasted a Google Drive folder link or folder ID
+    if (input.includes('/folders/') || (input.includes('drive.google.com') && !input.includes('/file/d/') && !input.includes('id=')) || (input.length > 20 && !input.includes('/') && !input.includes('.'))) {
+      try {
+        setIsFolderFetching(true);
+        const folderUrl = getBackendUrl(`/api/gdrive-folder-files?url=${encodeURIComponent(input)}`);
+        const res = await fetch(folderUrl);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed to fetch Google Drive folder (${res.status})`);
+        }
+        const data = await res.json();
+        if (data.files && data.files.length > 0) {
+          setFolderFiles(data.files);
+          setSelectedFileIds(new Set(data.files.map((f: any) => f.id)));
+        } else {
+          setErrorMsg('No KMZ, KML, or GeoTIFF files found in this Google Drive folder.');
+        }
+      } catch (err: any) {
+        console.error(err);
+        setErrorMsg(`Failed to inspect Google Drive folder: ${err.message || err}`);
+      } finally {
+        setLoading(false);
+        setIsFolderFetching(false);
+      }
+      return;
+    }
+
     if (input.includes('drive.google.com') && (input.includes('.tif') || input.includes('_cog') || input.includes('orthomosaic'))) {
       setErrorMsg(
         'GeoTIFF rasters on Google Drive must be registered in the ADMIN tab so the tile server can process and stream map tiles!'
@@ -442,6 +476,43 @@ export default function App() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Batch Load Selected Files from Google Drive Folder
+  const handleBatchLoadFolderFiles = async () => {
+    if (selectedFileIds.size === 0) return;
+    setLoading(true);
+    setErrorMsg(null);
+
+    const filesToLoad = folderFiles.filter((f) => selectedFileIds.has(f.id));
+    let loadedCount = 0;
+    let failCount = 0;
+
+    for (const item of filesToLoad) {
+      try {
+        const downloadUrl = getBackendUrl(`/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+          throw new Error(`Download failed for ${item.name}`);
+        }
+        const blob = await response.blob();
+        const file = new File([blob], item.name);
+        await processUploadedFiles([file] as any);
+        loadedCount++;
+      } catch (e: any) {
+        console.error(`Failed to load KMZ file ${item.name}:`, e);
+        failCount++;
+      }
+    }
+
+    setLoading(false);
+    if (loadedCount > 0) {
+      setFolderFiles([]);
+      setUrlInput('');
+    }
+    if (failCount > 0) {
+      setErrorMsg(`Loaded ${loadedCount} file(s), but ${failCount} failed to load.`);
     }
   };
 
@@ -1007,24 +1078,96 @@ export default function App() {
               {uploadTab === 'url' && (
                 <div className="space-y-2">
                   <div className="text-[9px] text-high-teal font-medium leading-relaxed font-mono">
-                    Paste public link of your KMZ, KML, or COG GeoTIFF file (supports Google Drive/Dropbox share links).
+                    Paste Google Drive folder link, file link, or public KMZ/KML link.
                   </div>
                   <div className="flex space-x-1.5">
                     <input
                       type="text"
-                      placeholder="Paste link here..."
+                      placeholder="Paste Google Drive folder or file link..."
                       value={urlInput}
                       onChange={(e) => setUrlInput(e.target.value)}
                       className="flex-1 px-2 py-1 text-[11px] bg-high-darker border border-high-border rounded-lg focus:outline-none focus:border-high-accent text-high-text placeholder:text-high-teal/30 font-semibold"
                     />
                     <button
                       onClick={handleUrlImport}
-                      disabled={!urlInput.trim()}
-                      className="px-2.5 py-1 bg-high-accent hover:bg-high-accent/80 text-high-bg text-[10px] font-extrabold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!urlInput.trim() || loading || isFolderFetching}
+                      className="px-2.5 py-1 bg-high-accent hover:bg-high-accent/80 text-high-bg text-[10px] font-extrabold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                     >
-                      Fetch
+                      {isFolderFetching ? 'Scanning...' : 'Inspect Link'}
                     </button>
                   </div>
+
+                  {/* Google Drive Folder KMZ File Selector */}
+                  {folderFiles.length > 0 && (
+                    <div className="mt-3 p-2.5 bg-high-darker/90 border border-high-accent/40 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold text-high-accent uppercase tracking-wider flex items-center gap-1">
+                          <Folder className="w-3.5 h-3.5" />
+                          Drive Folder Files ({folderFiles.length})
+                        </span>
+                        <div className="flex gap-1.5 text-[9px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFileIds(new Set(folderFiles.map(f => f.id)))}
+                            className="text-high-teal hover:text-high-accent underline"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-high-teal/30">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFileIds(new Set())}
+                            className="text-high-teal hover:text-high-accent underline"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-44 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                        {folderFiles.map((file) => {
+                          const isSelected = selectedFileIds.has(file.id);
+                          const sizeKb = file.size ? (file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB`) : '';
+                          return (
+                            <label
+                              key={file.id}
+                              className={`flex items-center justify-between p-1.5 rounded-lg border text-[10px] cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-high-accent/10 border-high-accent text-high-text'
+                                  : 'bg-high-bg/50 border-high-border/50 text-high-teal/70 hover:border-high-teal'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedFileIds);
+                                    if (e.target.checked) next.add(file.id);
+                                    else next.delete(file.id);
+                                    setSelectedFileIds(next);
+                                  }}
+                                  className="accent-[#10B981] w-3 h-3 rounded"
+                                />
+                                <span className="font-semibold truncate">{file.name}</span>
+                              </div>
+                              {sizeKb && <span className="text-[8px] font-mono text-high-teal/50 whitespace-nowrap">{sizeKb}</span>}
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleBatchLoadFolderFiles}
+                        disabled={selectedFileIds.size === 0 || loading}
+                        className="w-full py-1.5 bg-high-accent hover:bg-high-accent/80 text-high-bg text-[10px] font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Load Selected Files ({selectedFileIds.size})</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

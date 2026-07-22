@@ -14,6 +14,10 @@ os.environ.setdefault('GDAL_CACHEMAX', '512')  # 512 MB
 GDRIVE_SA_CREDS = None
 try:
     sa_key_str = os.environ.get('GDRIVE_SA_KEY')
+    local_sa_path = os.path.join(os.path.dirname(__file__), 'converter_tool', 'service_account.json')
+    if not os.path.exists(local_sa_path):
+        local_sa_path = os.path.join(os.path.dirname(__file__), 'service_account.json')
+
     if sa_key_str:
         from google.oauth2 import service_account
         sa_info = json.loads(sa_key_str)
@@ -21,9 +25,16 @@ try:
             sa_info,
             scopes=['https://www.googleapis.com/auth/drive.readonly']
         )
-        print("Google Drive service account credentials loaded successfully.")
+        print("Google Drive service account credentials loaded from env var.")
+    elif os.path.exists(local_sa_path):
+        from google.oauth2 import service_account
+        GDRIVE_SA_CREDS = service_account.Credentials.from_service_account_file(
+            local_sa_path,
+            scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        print(f"Google Drive service account credentials loaded from local file: {local_sa_path}")
     else:
-        print("GDRIVE_SA_KEY env var not set — will fall back to gdown for downloads.")
+        print("GDRIVE_SA_KEY env var or local service_account.json not found — will fall back to gdown.")
 except Exception as e:
     print(f"Failed to load Google Drive service account credentials: {e}")
 
@@ -145,6 +156,56 @@ def get_gdrive_file_id(url):
     except Exception:
         pass
     return None
+
+# Helper to extract Google Drive Folder ID
+def get_gdrive_folder_id(url):
+    if not url:
+        return None
+    url = url.strip()
+    if 'drive.google.com' not in url and len(url) > 15 and '/' not in url and '?' not in url:
+        return url
+    try:
+        if '/folders/' in url:
+            parts = url.split('/folders/')
+            if len(parts) > 1:
+                return parts[1].split('/')[0].split('?')[0]
+        elif 'id=' in url:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(url)
+            queries = urllib.parse.parse_qs(parsed.query)
+            if 'id' in queries:
+                return queries['id'][0]
+    except Exception:
+        pass
+    return None
+
+# Helper to list all files inside a Google Drive Folder
+def list_gdrive_folder_contents(folder_id):
+    if not GDRIVE_SA_CREDS:
+        raise Exception("Google Drive Service Account credentials not configured.")
+    from googleapiclient.discovery import build
+    service = build('drive', 'v3', credentials=GDRIVE_SA_CREDS)
+    query = f"'{folder_id}' in parents and trashed = false"
+    results = service.files().list(
+        q=query,
+        pageSize=100,
+        fields="files(id, name, mimeType, size, webViewLink, createdTime)"
+    ).execute()
+    files = results.get('files', [])
+
+    # If folder query returns empty, list files visible to service account
+    if not files:
+        all_res = service.files().list(
+            pageSize=100,
+            fields="files(id, name, mimeType, size, webViewLink, parents)"
+        ).execute()
+        all_files = all_res.get('files', [])
+        files = [f for f in all_files if folder_id in (f.get('parents') or [])]
+        if not files:
+            # Return all KMZ/KML files shared with service account if specific parent match fails
+            files = [f for f in all_files if f['name'].lower().endswith(('.kmz', '.kml'))]
+
+    return files
 
 # Helper to stream-download file from Google Drive
 def download_gdrive_file(file_id, destination_path):
@@ -585,6 +646,57 @@ def debug_tile():
     except Exception as e:
         import traceback
         return jsonify({'status': 'error', 'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/gdrive-folder-files', methods=['GET', 'POST', 'OPTIONS'])
+def get_gdrive_folder_files():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    url = request.args.get('url') or (request.json or {}).get('url', '')
+    folder_id = get_gdrive_folder_id(url)
+    if not folder_id and url:
+        folder_id = url.strip()
+
+    if not folder_id:
+        return jsonify({'error': 'Invalid Google Drive folder URL or ID.'}), 400
+
+    try:
+        files = list_gdrive_folder_contents(folder_id)
+        filtered = []
+        for f in files:
+            name_lower = f.get('name', '').lower()
+            if name_lower.endswith(('.kmz', '.kml', '.tif', '.tiff')) or f.get('mimeType') in ['application/vnd.google-earth.kmz', 'application/vnd.google-earth.kml+xml']:
+                filtered.append({
+                    'id': f['id'],
+                    'name': f['name'],
+                    'size': f.get('size', 0),
+                    'mimeType': f.get('mimeType', ''),
+                    'downloadUrl': f"https://drive.google.com/uc?id={f['id']}&export=download"
+                })
+
+        return jsonify({
+            'success': True,
+            'folder_id': folder_id,
+            'files': filtered if filtered else files
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/gdrive-download/<file_id>', methods=['GET'])
+def proxy_gdrive_download(file_id):
+    """Proxy download of KMZ/KML files from Google Drive to bypass browser CORS."""
+    import time
+    try:
+        temp_name = f"gdrive_{file_id}_{int(time.time())}.kmz"
+        temp_path = os.path.join(TEMP_FOLDER, temp_name)
+        download_gdrive_file(file_id, temp_path)
+        
+        filename = request.args.get('name', f"{file_id}.kmz")
+        return send_file(temp_path, as_attachment=True, download_name=filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/bounds', methods=['GET'])
