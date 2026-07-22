@@ -476,6 +476,42 @@ _empty_buf = io.BytesIO()
 _empty_img.save(_empty_buf, format='PNG')
 EMPTY_TILE_BYTES = _empty_buf.getvalue()
 
+@app.route('/api/bounds', methods=['GET', 'OPTIONS'])
+def get_bounds_endpoint():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    filename = request.args.get('filename')
+    gdrive_id = request.args.get('gdrive_id')
+
+    env_headers = {}
+    if gdrive_id:
+        source_path, env_headers = get_gdrive_vsicurl_source(gdrive_id)
+    elif filename:
+        unquoted = urllib.parse.unquote(filename)
+        if os.path.exists(unquoted):
+            source_path = unquoted
+        elif os.path.exists(os.path.normpath(unquoted)):
+            source_path = os.path.normpath(unquoted)
+        elif os.path.exists(filename):
+            source_path = filename
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    else:
+        return jsonify({'error': 'Filename or gdrive_id required'}), 400
+
+    bounds = get_cached_raster_wgs84_bounds(source_path, env_headers)
+    if bounds:
+        s, w, n, e = bounds
+        return jsonify({
+            'status': 'ok',
+            'bounds': {'south': s, 'west': w, 'north': n, 'east': e},
+            'left': w, 'bottom': s, 'right': e, 'top': n
+        })
+    else:
+        return jsonify({'error': 'Failed to read bounds from raster'}), 500
+
+
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
 def serve_tile(z, x, y):
     """Serve XYZ map tiles from a local GeoTIFF or direct Google Drive cloud stream."""

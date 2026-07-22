@@ -306,6 +306,30 @@ def get_surveys():
 def health():
     return jsonify({"status": "ok", "message": "DroneSurvey Local Server Running"})
 
+@app.route('/api/bounds', methods=['GET', 'OPTIONS'])
+def get_bounds_endpoint():
+    if request.method == 'OPTIONS':
+        return '', 200
+    raw_filename = request.args.get('filename')
+    if not raw_filename:
+        return jsonify({'error': 'Filename required'}), 400
+    filename = urllib.parse.unquote(raw_filename)
+    if not os.path.exists(filename):
+        norm = os.path.normpath(filename)
+        if os.path.exists(norm):
+            filename = norm
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    bounds = get_cached_bounds(filename)
+    if bounds:
+        s, w, n, e = bounds
+        return jsonify({
+            'status': 'ok',
+            'bounds': {'south': s, 'west': w, 'north': n, 'east': e},
+            'left': w, 'bottom': s, 'right': e, 'top': n
+        })
+    return jsonify({'error': 'Failed to read bounds'}), 500
+
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
 def serve_tile(z, x, y):
     import rasterio

@@ -842,9 +842,14 @@ export default function App() {
     setVisibleLayerIds(prev => [...prev, newLayer.id]);
     setSelectedLayerId(newLayer.id);
 
+    // Trigger map auto-zoom request
+    setZoomLayerRequest({ layerId: newLayer.id, timestamp: Date.now() });
+
+    // Close mobile panel on success
+    setMobileLeftPanelOpen(false);
+
     // Reset inputs
     setTileLayerName('');
-    setTileUrlTemplate('');
     setTileBounds({ north: '', south: '', east: '', west: '' });
   };
 
