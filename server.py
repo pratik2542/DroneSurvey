@@ -193,14 +193,17 @@ def get_raster_bounds(filepath):
         return [bounds[1], bounds[3], bounds[0], bounds[2]] # [minLat, maxLat, minLng, maxLng]
 
 # Check if a GeoTIFF is already Cloud Optimized (has overviews + tiling)
-def is_cog(filepath):
+def is_cog(filepath, env_headers=None):
     import rasterio
     try:
-        with rasterio.open(filepath) as src:
-            has_overviews = len(src.overviews(1)) > 0
-            is_tiled = src.profile.get('tiled', False)
-            return has_overviews and is_tiled
-    except Exception:
+        ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
+        with ctx:
+            with rasterio.open(filepath) as src:
+                has_overviews = len(src.overviews(1)) > 0
+                is_tiled = src.profile.get('tiled', False)
+                return has_overviews and is_tiled
+    except Exception as e:
+        print(f"is_cog check error for {filepath[-30:]}: {e}")
         return False
 
 # Convert GeoTIFF to Cloud Optimized GeoTIFF (COG) using rasterio.
@@ -251,7 +254,13 @@ _gdrive_token_lock = threading.Lock()
 def get_gdrive_vsicurl_source(file_id):
     headers = {
         'GDAL_DISABLE_READDIR_ON_OPEN': 'EMPTY_DIR',
-        'CPL_VSIL_CURL_USE_HEAD': 'NO'
+        'CPL_VSIL_CURL_USE_HEAD': 'NO',
+        'GDAL_HTTP_MAX_RETRY': '10',
+        'GDAL_HTTP_RETRY_DELAY': '1',
+        'GDAL_HTTP_TIMEOUT': '30',
+        'VSI_CACHE': 'TRUE',
+        'VSI_CACHE_SIZE': '50000000',
+        'CPL_VSIL_CURL_CHUNK_SIZE': '524288'
     }
     if GDRIVE_SA_CREDS:
         try:
@@ -294,15 +303,19 @@ def process_survey_async(survey_doc):
     try:
         if survey_type == 'raster' and file_id:
             # ── Direct Cloud Tile Streaming from Google Drive (0 MB downloaded!) ──
-            print(f"Async: Setting up Direct Cloud Streaming for {name} (file_id={file_id})...")
+            print(f"Async: Checking Direct Cloud Streaming for {name} (file_id={file_id})...")
             vsi_path, env_headers = get_gdrive_vsicurl_source(file_id)
             try:
-                bounds = get_cached_raster_wgs84_bounds(vsi_path, env_headers)
-                if bounds:
-                    final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?gdrive_id={file_id}"
-                    update_survey_status(survey_doc, 'completed', url=final_url, bounds=bounds)
-                    print(f"Async: Direct Cloud Streaming ready for {name}! (0 MB downloaded onto container)")
-                    return
+                # Direct streaming requires a Cloud Optimized GeoTIFF (tiled + overviews)
+                if is_cog(vsi_path, env_headers):
+                    bounds = get_cached_raster_wgs84_bounds(vsi_path, env_headers)
+                    if bounds:
+                        final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?gdrive_id={file_id}"
+                        update_survey_status(survey_doc, 'completed', url=final_url, bounds=bounds)
+                        print(f"Async: Direct Cloud Streaming ready for {name}! (0 MB downloaded onto container)")
+                        return
+                else:
+                    print(f"Async: {name} is NOT a Cloud Optimized GeoTIFF (uncog/striped). Direct streaming skipped, proceeding to local cache.")
             except Exception as stream_err:
                 print(f"Cloud streaming check failed ({stream_err}) — falling back to local caching...")
 
