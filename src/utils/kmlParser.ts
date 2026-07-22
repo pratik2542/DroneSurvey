@@ -511,7 +511,7 @@ export async function parseGeospatialFile(file: File): Promise<KmlLayer> {
     const zip = new JSZip();
     const contents = await zip.loadAsync(file);
     
-    // 2. Look up all images inside the zip to map relative paths to object URLs
+    // 2. Look up icon images inside the zip (skip massive basemap rasters > 25MB to prevent Chrome OOM)
     const zipImageUrls: Record<string, string> = {};
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg'];
     
@@ -519,9 +519,16 @@ export async function parseGeospatialFile(file: File): Promise<KmlLayer> {
       const isImage = imageExtensions.some(ext => relativePath.toLowerCase().endsWith(ext));
       if (isImage && !fileObj.dir) {
         try {
+          const uncompressedSize = (fileObj as any)._data?.uncompressedSize || 0;
+          if (uncompressedSize > 25 * 1024 * 1024) {
+            console.warn(`Skipping pre-allocation for large embedded image ${relativePath} (${Math.round(uncompressedSize / 1024 / 1024)} MB) to prevent browser memory crash.`);
+            continue;
+          }
           const blob = await fileObj.async('blob');
           const objectUrl = URL.createObjectURL(blob);
           zipImageUrls[relativePath] = objectUrl;
+          zipImageUrls[relativePath.replace(/^files\//, '')] = objectUrl;
+          zipImageUrls[relativePath.replace(/^\.\//, '')] = objectUrl;
         } catch (err) {
           console.error(`Failed to load image ${relativePath} from KMZ:`, err);
         }

@@ -537,8 +537,8 @@ export default function App() {
         }
 
         const blob = await response.blob();
-        const file = new File([blob], item.name);
-        await processUploadedFiles([file] as any);
+        Object.defineProperty(blob, 'name', { value: item.name, writable: false });
+        await processUploadedFiles([blob as File]);
         loadedCount++;
       } catch (e: any) {
         console.error(`Failed to load KMZ file ${item.name}:`, e);
