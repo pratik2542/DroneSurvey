@@ -398,37 +398,39 @@ export default function App() {
     if (input.includes('/folders/') || (input.includes('drive.google.com') && !input.includes('/file/d/') && !input.includes('id=')) || (input.length > 20 && !input.includes('/') && !input.includes('.'))) {
       try {
         setIsFolderFetching(true);
-        const savedHost = localStorage.getItem('drone_tile_host') || '';
-        const candidateHosts = [
-          savedHost,
-          'http://localhost:8000',
-          getBackendUrl('')
-        ].filter(Boolean);
+        const param = `url=${encodeURIComponent(input)}`;
+        
+        let host = '';
+        try {
+          if (tileUrlTemplate.trim()) {
+            host = new URL(tileUrlTemplate.trim()).origin;
+          }
+        } catch (e) {}
 
-        let data = null;
-        let lastErr = null;
+        const candidates = [];
+        if (host && host.startsWith('http')) {
+          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+          candidates.push(`${cleanHost}/api/gdrive-folder-files?${param}`);
+        }
+        candidates.push(`http://localhost:8000/api/gdrive-folder-files?${param}`);
+        candidates.push(getBackendUrl(`/api/gdrive-folder-files?${param}`));
 
-        for (const hostBase of candidateHosts) {
+        let res: Response | null = null;
+        for (const candidate of candidates) {
           try {
-            const cleanBase = hostBase.endsWith('/') ? hostBase.slice(0, -1) : hostBase;
-            const folderUrl = `${cleanBase}/api/gdrive-folder-files?url=${encodeURIComponent(input)}`;
-            const res = await fetch(folderUrl);
-            if (res.ok) {
-              data = await res.json();
-              if (hostBase.startsWith('http')) {
-                localStorage.setItem('drone_tile_host', cleanBase);
-              }
+            const r = await fetch(candidate);
+            if (r.ok) {
+              res = r;
               break;
             }
-          } catch (e) {
-            lastErr = e;
-          }
+          } catch (e) {}
         }
 
-        if (!data) {
-          throw lastErr || new Error('Failed to reach backend server. Ensure server.py is running!');
+        if (!res) {
+          throw new Error('Failed to reach folder inspection service. Please check your local server connection or ensure server.py is running.');
         }
 
+        const data = await res.json();
         if (data.files && data.files.length > 0) {
           setFolderFiles(data.files);
           setSelectedFileIds(new Set(data.files.map((f: any) => f.id)));
@@ -509,39 +511,49 @@ export default function App() {
     setLoading(true);
     setErrorMsg(null);
 
-    const savedHost = localStorage.getItem('drone_tile_host') || '';
-    const candidateHosts = [
-      savedHost,
-      'http://localhost:8000',
-      getBackendUrl('')
-    ].filter(Boolean);
+    let host = '';
+    try {
+      if (tileUrlTemplate.trim()) {
+        host = new URL(tileUrlTemplate.trim()).origin;
+      }
+    } catch (e) {}
 
     const filesToLoad = folderFiles.filter((f) => selectedFileIds.has(f.id));
     let loadedCount = 0;
     let failCount = 0;
 
     for (const item of filesToLoad) {
-      let fileLoaded = false;
-      for (const hostBase of candidateHosts) {
-        try {
-          const cleanBase = hostBase.endsWith('/') ? hostBase.slice(0, -1) : hostBase;
-          const downloadUrl = `${cleanBase}/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`;
-          const response = await fetch(downloadUrl);
-          if (response.ok) {
-            const blob = await response.blob();
-            const file = new File([blob], item.name);
-            await processUploadedFiles([file] as any);
-            fileLoaded = true;
-            break;
-          }
-        } catch (e: any) {
-          console.warn(`Download attempt failed on ${hostBase}:`, e);
+      try {
+        const candidates = [];
+        if (host && host.startsWith('http')) {
+          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+          candidates.push(`${cleanHost}/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
         }
-      }
+        candidates.push(`http://localhost:8000/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
+        candidates.push(`https://drive.google.com/uc?id=${item.id}&export=download`);
+        candidates.push(getBackendUrl(`/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`));
 
-      if (fileLoaded) {
+        let response: Response | null = null;
+        for (const candidate of candidates) {
+          try {
+            const r = await fetch(candidate);
+            if (r.ok) {
+              response = r;
+              break;
+            }
+          } catch (e) {}
+        }
+
+        if (!response) {
+          throw new Error(`Download failed for ${item.name}`);
+        }
+
+        const blob = await response.blob();
+        const file = new File([blob], item.name);
+        await processUploadedFiles([file] as any);
         loadedCount++;
-      } else {
+      } catch (e: any) {
+        console.error(`Failed to load KMZ file ${item.name}:`, e);
         failCount++;
       }
     }
@@ -683,9 +695,6 @@ export default function App() {
       filename = urlObj.searchParams.get('filename') || '';
       gdrive_id = urlObj.searchParams.get('gdrive_id') || '';
       host = urlObj.origin;
-      if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
-        localStorage.setItem('drone_tile_host', host);
-      }
       
       if ((urlObj.pathname === '/' || urlObj.pathname === '') && filename) {
         urlStr = `${host}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
