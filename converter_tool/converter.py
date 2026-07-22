@@ -253,6 +253,13 @@ class App:
                                 pct = 30 + int((idx / total) * 70)
                                 self._ui(lambda p=pct: self._set_bar(1, p))
 
+                self._ui(lambda: self._set_bar(1, 90))
+                self._ui(lambda: self._log('Building pyramid overviews for fast cloud streaming…'))
+                with rasterio.open(output_path, 'r+') as dst:
+                    dst.build_overviews([2, 4, 8, 16, 32, 64, 128], Resampling.nearest)
+                    dst.update_tags(ns='rio_overview', resampling='nearest')
+                self._ui(lambda: self._log('Pyramid overviews generated successfully ✓'))
+
                 self._ui(lambda: self._set_bar(1, 100))
                 self._ui(lambda: self._set_step(1, 'done'))
 

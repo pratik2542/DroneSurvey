@@ -246,6 +246,12 @@ def convert_to_cog(input_path, output_path):
                 if idx % 500 == 0:
                     print(f"  COG progress: {idx}/{total} blocks ({100*idx//total}%)")
 
+    print(f"Building overviews on COG output file...")
+    with rasterio.open(output_path, 'r+') as dst:
+        dst.build_overviews([2, 4, 8, 16, 32, 64, 128], Resampling.nearest)
+        dst.update_tags(ns='rio_overview', resampling='nearest')
+    print("COG overviews complete ✓")
+
 # Cached token for vsicurl Google Drive streaming (avoid refreshing on every tile)
 _gdrive_token_cache = {'token': None, 'expiry': None}
 _gdrive_token_lock = threading.Lock()
