@@ -758,8 +758,13 @@ export default function App() {
         localStorage.setItem('connected_tile_host', cleanHost);
       }
 
-      if ((urlObj.pathname === '/' || urlObj.pathname === '') && filename) {
-        urlStr = `${host}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
+      if (!urlStr.includes('{z}') && !urlStr.includes('{x}') && !urlStr.includes('{y}')) {
+        const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+        if (filename) {
+          urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
+        } else {
+          urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png${urlObj.search}`;
+        }
       }
     } catch (e) {
       console.warn('Failed to parse URL template', e);
@@ -1050,37 +1055,37 @@ export default function App() {
   return (
     <div className="h-screen overflow-hidden bg-high-bg text-high-text flex flex-col font-sans antialiased selection:bg-high-accent selection:text-high-bg">
       {/* 1. Header Bar */}
-      <header className="bg-high-darker border-b border-high-border px-6 py-4 flex flex-row items-center justify-between gap-4 z-10 shadow-lg">
-        <div className="flex items-center space-x-3">
+      <header className="bg-high-darker border-b border-high-border px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-row items-center justify-between gap-2 sm:gap-4 z-10 shadow-lg shrink-0">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           {/* Mobile menu trigger */}
           <button
             onClick={() => setMobileLeftPanelOpen(true)}
-            className="lg:hidden p-2 bg-high-bg border border-high-border rounded-lg text-high-accent hover:bg-high-border transition-all"
+            className="lg:hidden p-1.5 sm:p-2 bg-high-bg border border-high-border rounded-lg text-high-accent hover:bg-high-border transition-all shrink-0"
             title="Open Sidebar"
           >
-            <Layers className="w-5 h-5" />
+            <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          <div className="flex items-center space-x-2">
-            <div className="hidden sm:block p-2 bg-high-bg border border-high-border rounded-lg shadow-inner">
+          <div className="flex items-center space-x-2 min-w-0">
+            <div className="hidden sm:block p-2 bg-high-bg border border-high-border rounded-lg shadow-inner shrink-0">
               <Globe className="w-5 h-5 text-high-accent" />
             </div>
-            <div>
-              <h1 className="text-xs sm:text-sm font-extrabold tracking-widest text-high-text flex items-center space-x-1.5 uppercase">
-                <span>DroneSurvey GIS</span>
-                <span className="text-[8px] sm:text-[9px] bg-high-border text-high-accent border border-high-accent px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Web GIS</span>
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-extrabold tracking-wider text-high-text flex items-center space-x-1 uppercase truncate">
+                <span className="truncate">DroneSurvey</span>
+                <span className="hidden xs:inline-block text-[8px] sm:text-[9px] bg-high-border text-high-accent border border-high-accent px-1 sm:px-1.5 py-0.5 rounded font-bold uppercase tracking-widest shrink-0">GIS</span>
               </h1>
-              <p className="hidden md:block text-[10px] text-high-teal font-semibold font-mono">Standalone spatial viewer & KML/KMZ/TIF parser workbench</p>
+              <p className="hidden md:block text-[10px] text-high-teal font-semibold font-mono truncate">Standalone spatial viewer & KML/KMZ/TIF parser workbench</p>
             </div>
           </div>
         </div>
 
         {/* Quick controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           {/* Local Server & Tools Download Button */}
           <button
             onClick={() => setIsServerSetupModalOpen(true)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 border shadow-sm cursor-pointer ${
+            className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 sm:space-x-1.5 border shadow-sm cursor-pointer ${
               isServerConnected 
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' 
                 : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
@@ -1088,26 +1093,19 @@ export default function App() {
             title="Download Local Server & Converter Tools, or check connectivity"
           >
             <Zap className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Local Tools & Server</span>
+            <span className="hidden md:inline">Local Tools & Server</span>
+            <span className="hidden sm:inline md:hidden">Tools</span>
             <span className={`w-2 h-2 rounded-full ${isServerConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
           </button>
 
-          {layers.length === 0 && (
-            <button
-              onClick={loadSampleData}
-              className="px-2.5 py-1.5 bg-high-bg hover:bg-high-border text-high-accent text-xs font-bold rounded-lg transition-all flex items-center space-x-1 border border-high-border shadow-sm group cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />
-              <span className="hidden sm:inline">SF Sample</span>
-            </button>
-          )}
+
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-1.5 bg-high-accent hover:bg-high-accent/80 text-high-bg text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 shadow-md shadow-high-accent/10 cursor-pointer border border-high-accent"
+            className="px-2.5 sm:px-3 py-1.5 bg-high-accent hover:bg-high-accent/80 text-high-bg text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1 sm:space-x-1.5 shadow-md shadow-high-accent/10 cursor-pointer border border-high-accent"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Import</span>
+            <span className="text-xs">Import</span>
           </button>
           <input
             type="file"

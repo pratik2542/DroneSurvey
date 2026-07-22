@@ -1,18 +1,1 @@
-[
-  {
-    "id": "sf-sample-kml",
-    "name": "San Francisco Landmarks (Vector KMZ)",
-    "type": "vector",
-    "url": "https://raw.githubusercontent.com/googlemaps/kml-samples/gh-pages/kml/Placemark/placemark.kml",
-    "description": "Google KML sample dataset showcasing placemarks and shapes.",
-    "fileName": "placemark.kml"
-  },
-  {
-    "id": "keshav-dsm-tiff",
-    "name": "Keshav Site Orthomosaic (COG Raster GeoTIFF)",
-    "type": "raster",
-    "url": "https://titiler.xyz/cog/tiles/{z}/{x}/{y}.png?url=https://opendata.digitalglobe.com/spacenet/dataset/spacenet-buildings/spacenet_buildings_key_points.tif",
-    "bounds": [37.4, -122.1, 37.6, -121.9],
-    "description": "Example high-resolution satellite raster layer served via free TiTiler on Cloud Optimized GeoTIFF."
-  }
-]
+[]
