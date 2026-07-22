@@ -438,6 +438,8 @@ def serve_tile(z, x, y):
                     num_bands = min(src.count, 3)
                     data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
+                    print(f"TILE z={z} x={x} y={y}: src.crs={src.crs} bands={src.count} dtype={src.dtypes[0]} bounds={src.bounds}")
+
                     for band_idx in range(1, num_bands + 1):
                         reproject(
                             source=rasterio.band(src, band_idx),
@@ -448,6 +450,8 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
+
+                    print(f"TILE z={z} x={x} y={y}: data[0].max={data[0].max()} data[0].min={data[0].min()}")
 
                     # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
                     alpha = np.zeros((tile_size, tile_size), dtype=np.uint8)
@@ -461,6 +465,7 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
+                        print(f"TILE z={z} x={x} y={y}: alpha(band4).max={alpha.max()}")
 
                     # Fallback if 4th band is empty or unavailable
                     if alpha.max() == 0:
@@ -468,7 +473,9 @@ def serve_tile(z, x, y):
                             alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
                         else:
                             alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+                        print(f"TILE z={z} x={x} y={y}: alpha(fallback).max={alpha.max()}")
 
+        print(f"TILE z={z} x={x} y={y}: FINAL alpha.max={alpha.max()} num_bands={num_bands}")
 
         # Write PNG tile
         if num_bands >= 3:
