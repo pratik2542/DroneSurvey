@@ -414,7 +414,7 @@ export default function App() {
         }
 
         if (!res) {
-          throw new Error('Failed to reach folder inspection service. Please check your local server connection or ensure server.py is running.');
+          throw new Error('Local server is not running on http://localhost:8000. Please double-click start_local_server.bat on your PC to inspect Google Drive folders, or download the KMZ file to your PC and use the LOCAL tab!');
         }
 
         const data = await res.json();
