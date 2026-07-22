@@ -247,7 +247,7 @@ def convert_to_cog(input_path, output_path):
 def get_gdrive_vsicurl_source(file_id):
     headers = {
         'GDAL_DISABLE_READDIR_ON_OPEN': 'EMPTY_DIR',
-        'CPL_VSIL_CURL_ALLOWED_EXTENSIONS': 'tif,tiff,cog'
+        'CPL_VSIL_CURL_USE_HEAD': 'NO'
     }
     if GDRIVE_SA_CREDS:
         try:
@@ -264,6 +264,7 @@ def get_gdrive_vsicurl_source(file_id):
     # Fallback for public drive files
     pub_url = f"https://drive.google.com/uc?export=download&id={file_id}"
     return f"/vsicurl/{pub_url}", headers
+
 
 
 # Asynchronous Background Caching & Processing Thread
