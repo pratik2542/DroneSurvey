@@ -528,28 +528,29 @@ def get_cache_status(id):
     if not survey_doc:
         return jsonify({'error': 'Survey not found'}), 404
         
-    filename = f"{id}.tif" if survey_doc['type'] == 'raster' else f"{id}.kmz"
-    local_path = os.path.join(UPLOAD_FOLDER, filename)
-    
-    if os.path.exists(local_path) and survey_doc.get('status') == 'completed':
+    if survey_doc.get('status') == 'completed':
         return jsonify({
             'cached': True,
             'survey': survey_doc
         })
-    else:
-        current_status = survey_doc.get('status', 'queued')
-        if current_status not in ['downloading', 'converting', 'uploading'] or not os.path.exists(local_path):
-            print(f"Cache miss for {survey_doc['name']}. Triggering background cache restore...")
-            survey_doc['status'] = 'downloading'
-            update_survey_status(survey_doc, 'downloading')
-            thread = threading.Thread(target=process_survey_async, args=(survey_doc,))
-            thread.start()
-            
-        return jsonify({
-            'cached': False,
-            'status': survey_doc.get('status', 'downloading'),
-            'survey': survey_doc
-        })
+
+    current_status = survey_doc.get('status', 'queued')
+    filename = f"{id}.tif" if survey_doc['type'] == 'raster' else f"{id}.kmz"
+    local_path = os.path.join(UPLOAD_FOLDER, filename)
+
+    if current_status not in ['downloading', 'converting', 'uploading', 'completed'] and not os.path.exists(local_path):
+        print(f"Cache miss for {survey_doc['name']}. Triggering background processing...")
+        survey_doc['status'] = 'downloading'
+        update_survey_status(survey_doc, 'downloading')
+        thread = threading.Thread(target=process_survey_async, args=(survey_doc,))
+        thread.start()
+
+    return jsonify({
+        'cached': False,
+        'status': survey_doc.get('status', 'downloading'),
+        'survey': survey_doc
+    })
+
 
 @app.route('/api/process-survey', methods=['POST', 'OPTIONS'])
 def process_survey():
