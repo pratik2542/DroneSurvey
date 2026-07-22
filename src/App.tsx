@@ -519,28 +519,44 @@ export default function App() {
     setLoading(true);
     setErrorMsg(null);
 
-    let host = '';
-    try {
-      if (tileUrlTemplate.trim()) {
-        host = new URL(tileUrlTemplate.trim()).origin;
-      }
-    } catch (e) {}
+    const getConnectedHost = (): string => {
+      try {
+        if (tileUrlTemplate.trim()) {
+          const u = new URL(tileUrlTemplate.trim());
+          if (u.origin && (u.origin.startsWith('http://') || u.origin.startsWith('https://'))) {
+            return u.origin.endsWith('/') ? u.origin.slice(0, -1) : u.origin;
+          }
+        }
+      } catch (e) {}
 
+      const saved = localStorage.getItem('connected_tile_host');
+      if (saved && (saved.startsWith('http://') || saved.startsWith('https://'))) {
+        return saved.endsWith('/') ? saved.slice(0, -1) : saved;
+      }
+
+      if (window.location.origin && (window.location.origin.startsWith('http://') || window.location.origin.startsWith('https://'))) {
+        if (window.location.origin.includes(':8000') || window.location.origin.includes('trycloudflare.com')) {
+          return window.location.origin.endsWith('/') ? window.location.origin.slice(0, -1) : window.location.origin;
+        }
+      }
+
+      return '';
+    };
+
+    const activeHost = getConnectedHost();
     const filesToLoad = folderFiles.filter((f) => selectedFileIds.has(f.id));
     let loadedCount = 0;
     let failCount = 0;
 
     for (const item of filesToLoad) {
       try {
-        const candidates = [
-          `https://lh3.googleusercontent.com/d/${item.id}`,
-          `http://localhost:8000/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`,
-          `https://corsproxy.io/?https://drive.google.com/uc?id=${item.id}&export=download`
-        ];
-        if (host && host.startsWith('http')) {
-          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
-          candidates.push(`${cleanHost}/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
+        const candidates = [];
+        if (activeHost) {
+          candidates.push(`${activeHost}/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
         }
+        candidates.push(`http://localhost:8000/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
+        candidates.push(getBackendUrl(`/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`));
+        candidates.push(`https://lh3.googleusercontent.com/d/${item.id}`);
 
         let response: Response | null = null;
         for (const candidate of candidates) {
