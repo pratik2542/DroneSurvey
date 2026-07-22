@@ -348,7 +348,7 @@ export default function App() {
         }
         
         if (fileId) {
-          downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+          downloadUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
           fileName = `gdrive_${fileId}.kmz`;
         }
       }
@@ -363,19 +363,6 @@ export default function App() {
         }
       }
 
-      // Check if we are in development and need to use Vite's dev server proxy to bypass CORS
-      const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isDev) {
-        const proxyUrlObj = new URL(downloadUrl);
-        const host = proxyUrlObj.origin;
-        const proxyPath = `/tile-server-proxy${proxyUrlObj.pathname}${proxyUrlObj.search}`;
-        return {
-          url: proxyPath,
-          headers: { 'x-target-host': host },
-          fileName
-        };
-      }
-      
       return {
         url: downloadUrl,
         fileName
@@ -524,14 +511,15 @@ export default function App() {
 
     for (const item of filesToLoad) {
       try {
-        const candidates = [];
+        const candidates = [
+          `https://lh3.googleusercontent.com/d/${item.id}`,
+          `http://localhost:8000/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`,
+          `https://corsproxy.io/?https://drive.google.com/uc?id=${item.id}&export=download`
+        ];
         if (host && host.startsWith('http')) {
           const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
           candidates.push(`${cleanHost}/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
         }
-        candidates.push(`http://localhost:8000/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`);
-        candidates.push(`https://drive.google.com/uc?id=${item.id}&export=download`);
-        candidates.push(getBackendUrl(`/api/gdrive-download/${item.id}?name=${encodeURIComponent(item.name)}`));
 
         let response: Response | null = null;
         for (const candidate of candidates) {
