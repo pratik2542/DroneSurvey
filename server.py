@@ -243,25 +243,58 @@ def convert_to_cog(input_path, output_path):
                 if idx % 500 == 0:
                     print(f"  COG progress: {idx}/{total} blocks ({100*idx//total}%)")
 
+# Helper to build vsicurl source path + headers for Google Drive direct cloud streaming
+def get_gdrive_vsicurl_source(file_id):
+    headers = {}
+    if GDRIVE_SA_CREDS:
+        try:
+            from google.auth.transport.requests import Request
+            GDRIVE_SA_CREDS.refresh(Request())
+            token = GDRIVE_SA_CREDS.token
+            url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&supportsAllDrives=true"
+            vsi_path = f"/vsicurl/{url}"
+            headers['GDAL_HTTP_HEADERS'] = f"Authorization: Bearer {token}"
+            return vsi_path, headers
+        except Exception as e:
+            print(f"VSI token refresh error: {e}")
+
+    # Fallback for public drive files
+    pub_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    return f"/vsicurl/{pub_url}", headers
+
 # Asynchronous Background Caching & Processing Thread
 def process_survey_async(survey_doc):
     survey_id = survey_doc['id']
     file_id = get_gdrive_file_id(survey_doc['originalUrl'])
     survey_type = survey_doc['type']
     name = survey_doc['name']
-    
+
     temp_input = os.path.join(TEMP_FOLDER, f"{survey_id}_raw")
     temp_output = os.path.join(TEMP_FOLDER, f"{survey_id}_cog.tif")
-    
+
     try:
-        # 1. Download
+        if survey_type == 'raster' and file_id:
+            # ── Direct Cloud Tile Streaming from Google Drive (0 MB downloaded!) ──
+            print(f"Async: Setting up Direct Cloud Streaming for {name} (file_id={file_id})...")
+            vsi_path, env_headers = get_gdrive_vsicurl_source(file_id)
+            try:
+                bounds = get_cached_raster_wgs84_bounds(vsi_path, env_headers)
+                if bounds:
+                    final_url = f"/api/tiles/{{z}}/{{x}}/{{y}}.png?gdrive_id={file_id}"
+                    update_survey_status(survey_doc, 'completed', url=final_url, bounds=bounds)
+                    print(f"Async: Direct Cloud Streaming ready for {name}! (0 MB downloaded onto container)")
+                    return
+            except Exception as stream_err:
+                print(f"Cloud streaming check failed ({stream_err}) — falling back to local caching...")
+
+        # Fallback to local download & caching if file_id is not present or VSI streaming fails
         update_survey_status(survey_doc, 'downloading')
         print(f"Async: Downloading {name} from GDrive...")
         download_gdrive_file(file_id, temp_input)
-        
+
         final_url = ""
         bounds = None
-        
+
         if survey_type == 'raster':
             # 2. Check if already COG (uploaded via local converter tool)
             if is_cog(temp_input):
@@ -289,18 +322,18 @@ def process_survey_async(survey_doc):
             import shutil
             shutil.copy2(temp_input, local_dest)
             final_url = f"/tile-server-proxy/uploads/{survey_id}.kmz"
-                
+
         # Cleanup temp files
         try:
             if os.path.exists(temp_input): os.remove(temp_input)
             if os.path.exists(temp_output): os.remove(temp_output)
         except Exception as cleanup_err:
             print(f"Cleanup warning: {cleanup_err}")
-            
+
         # Complete
         update_survey_status(survey_doc, 'completed', url=final_url, bounds=bounds)
         print(f"Async: Completed processing & caching survey: {name}")
-        
+
     except Exception as e:
         print(f"Async processing failed for {name}: {e}")
         try:
@@ -310,24 +343,28 @@ def process_survey_async(survey_doc):
             pass
         update_survey_status(survey_doc, 'failed', error_msg=str(e))
 
+
 # --- Native Rasterio Tile Server Endpoints ---
 
 # Thread lock & bounds cache for thread-safe, high-performance GDAL tile serving
 RASTER_TILE_LOCK = threading.Lock()
 RASTER_BOUNDS_CACHE = {}
 
-def get_cached_raster_wgs84_bounds(filepath):
+def get_cached_raster_wgs84_bounds(filepath, env_headers=None):
     if filepath in RASTER_BOUNDS_CACHE:
         return RASTER_BOUNDS_CACHE[filepath]
     import rasterio
     from rasterio.warp import transform_bounds
     try:
-        with rasterio.open(filepath) as src:
-            w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-            res = (s, n, w, e)  # minLat, maxLat, minLng, maxLng
-            RASTER_BOUNDS_CACHE[filepath] = res
-            return res
-    except Exception:
+        ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
+        with ctx:
+            with rasterio.open(filepath) as src:
+                w, s, e, n = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+                res = (s, n, w, e)  # minLat, maxLat, minLng, maxLng
+                RASTER_BOUNDS_CACHE[filepath] = res
+                return res
+    except Exception as e:
+        print(f"Error fetching bounds for {filepath}: {e}")
         return None
 
 # Pre-created 256x256 transparent PNG bytes for instant response when tile is outside dataset
@@ -340,15 +377,22 @@ EMPTY_TILE_BYTES = _empty_buf.getvalue()
 
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', methods=['GET'])
 def serve_tile(z, x, y):
-    """Serve XYZ map tiles from a local GeoTIFF using rasterio safely & efficiently."""
+    """Serve XYZ map tiles from a local GeoTIFF or direct Google Drive cloud stream."""
     import math
     import numpy as np
     import rasterio
     from rasterio.warp import reproject, Resampling
     from rasterio.crs import CRS
 
-    filename = request.args.get('filename')
-    if not filename or not os.path.exists(filename):
+    gdrive_id = request.args.get('gdrive_id')
+    filename  = request.args.get('filename')
+
+    env_headers = {}
+    if gdrive_id:
+        source_path, env_headers = get_gdrive_vsicurl_source(gdrive_id)
+    elif filename and os.path.exists(filename):
+        source_path = filename
+    else:
         return jsonify({'error': 'File not found'}), 404
 
     try:
@@ -360,7 +404,7 @@ def serve_tile(z, x, y):
         lat_min = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * (y + 1) / n_zoom))))
 
         # 2. Instant bounding box overlap check — skip 95% of non-overlapping map tiles in 0.1ms
-        raster_bounds = get_cached_raster_wgs84_bounds(filename)
+        raster_bounds = get_cached_raster_wgs84_bounds(source_path, env_headers)
         if raster_bounds:
             r_lat_min, r_lat_max, r_lon_min, r_lon_max = raster_bounds
             if (lat_max < r_lat_min or lat_min > r_lat_max or
@@ -378,24 +422,26 @@ def serve_tile(z, x, y):
         dst_crs = CRS.from_epsg(3857)
         dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, tile_size, tile_size)
 
-        # 4. Thread-safe GDAL reprojection (prevents SIGSEGV container crash under multi-threaded requests)
+        # 4. Thread-safe GDAL reprojection (works for local files AND cloud vsicurl streams)
         with RASTER_TILE_LOCK:
-            with rasterio.open(filename) as src:
-                num_bands = min(src.count, 3)
-                data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
+            ctx = rasterio.Env(**env_headers) if env_headers else rasterio.Env()
+            with ctx:
+                with rasterio.open(source_path) as src:
+                    num_bands = min(src.count, 3)
+                    data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
-                for band_idx in range(1, num_bands + 1):
-                    reproject(
-                        source=rasterio.band(src, band_idx),
-                        destination=data[band_idx - 1],
-                        src_transform=src.transform,
-                        src_crs=src.crs,
-                        dst_transform=dst_transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling.nearest
-                    )
+                    for band_idx in range(1, num_bands + 1):
+                        reproject(
+                            source=rasterio.band(src, band_idx),
+                            destination=data[band_idx - 1],
+                            src_transform=src.transform,
+                            src_crs=src.crs,
+                            dst_transform=dst_transform,
+                            dst_crs=dst_crs,
+                            resampling=Resampling.nearest
+                        )
 
-                alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+                    alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
 
         # Write PNG tile
         if num_bands >= 3:
@@ -415,22 +461,35 @@ def serve_tile(z, x, y):
 
 @app.route('/api/bounds', methods=['GET'])
 def get_bounds():
-    """Return geographic bounds for a local GeoTIFF file."""
-    filename = request.args.get('filename')
-    if not filename or not os.path.exists(filename):
+    """Return geographic bounds for a local or cloud GeoTIFF file."""
+    gdrive_id = request.args.get('gdrive_id')
+    filename  = request.args.get('filename')
+
+    env_headers = {}
+    if gdrive_id:
+        source_path, env_headers = get_gdrive_vsicurl_source(gdrive_id)
+    elif filename and os.path.exists(filename):
+        source_path = filename
+    else:
         return jsonify({'error': 'File not found'}), 404
+
     try:
-        bounds = get_raster_bounds(filename)
+        bounds = get_cached_raster_wgs84_bounds(source_path, env_headers)
+        if not bounds:
+            return jsonify({'error': 'Failed to read bounds'}), 500
+
+        minlat, maxlat, minlon, maxlon = bounds
         return jsonify({
             'bounds': {
-                'left': bounds[2],
-                'bottom': bounds[0],
-                'right': bounds[3],
-                'top': bounds[1]
+                'left': minlon,
+                'bottom': minlat,
+                'right': maxlon,
+                'top': maxlat
             }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 # --- API Endpoints ---
