@@ -436,7 +436,7 @@ def serve_tile(z, x, y):
                 with rasterio.open(source_path) as src:
                     src_crs = src.crs if src.crs else CRS.from_epsg(4326)
                     num_bands = min(src.count, 3)
-                    print(f"[TILE {z}/{x}/{y}] opened {source_path[-40:]} bands={src.count} crs={src.crs} nodata={src.nodata} dtype={src.dtypes[0]}")
+                    print(f"[TILE {z}/{x}/{y}] src bands={src.count} crs={src.crs} nodata={src.nodata} dtype={src.dtypes[0]} size={src.width}x{src.height}")
                     data = np.zeros((num_bands, tile_size, tile_size), dtype=np.uint8)
 
                     for band_idx in range(1, num_bands + 1):
@@ -447,7 +447,7 @@ def serve_tile(z, x, y):
                             src_crs=src_crs,
                             dst_transform=dst_transform,
                             dst_crs=dst_crs,
-                            resampling=Resampling.nearest
+                            resampling=Resampling.bilinear
                         )
 
                     # 5. Alpha channel (support 4-band RGBA drone orthomosaics natively)
@@ -462,6 +462,7 @@ def serve_tile(z, x, y):
                             dst_crs=dst_crs,
                             resampling=Resampling.nearest
                         )
+                        print(f"[TILE {z}/{x}/{y}] band4 alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
                     # Fallback if 4th band is empty or unavailable
                     if alpha.max() == 0:
@@ -469,8 +470,9 @@ def serve_tile(z, x, y):
                             alpha = np.where((data[0] > 0) | (data[1] > 0) | (data[2] > 0), 255, 0).astype(np.uint8)
                         else:
                             alpha = np.where(data[0] > 0, 255, 0).astype(np.uint8)
+                        print(f"[TILE {z}/{x}/{y}] fallback alpha: max={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
-                    print(f"[TILE {z}/{x}/{y}] data max R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
+                    print(f"[TILE {z}/{x}/{y}] FINAL: R={data[0].max()} G={data[1].max() if num_bands>1 else 0} B={data[2].max() if num_bands>2 else 0} alpha={alpha.max()} non-zero={np.count_nonzero(alpha)}")
 
 
         # Write PNG tile
