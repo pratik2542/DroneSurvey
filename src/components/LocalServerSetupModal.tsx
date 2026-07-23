@@ -221,28 +221,35 @@ class ServerApp:
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
-        messagebox.showinfo('Copied Public Tunnel URL!', f'Public Tunnel URL copied to clipboard!\\n\\n{url}\\n\\nShare this link with remote users anywhere in the world!')
+        messagebox.showinfo('Copied Public Tunnel URL!', f'Public Tunnel URL copied to clipboard!\\n\\n{url}\\n\\nPaste under CONNECT TILE SERVER in the web app!')
 
     def _open_web_app(self): webbrowser.open(WEB_APP_URL)
 
     def _start_backend(self): threading.Thread(target=self._run_server_and_tunnel, daemon=True).start()
 
     def _run_server_and_tunnel(self):
-        self._log("Starting Local Tile Server on port 8000...")
+        self._log("Checking Python dependencies...")
         python_cmd = sys.executable or 'python'
         try:
+            res = subprocess.run([python_cmd, '-c', "import flask, rasterio, PIL, numpy; print('DEPS_OK')"], capture_output=True, text=True)
+            if 'DEPS_OK' not in res.stdout:
+                self._log("Installing required GIS libraries (flask, rasterio, Pillow, numpy)...")
+                subprocess.run([python_cmd, '-m', 'pip', 'install', 'flask', 'rasterio', 'Pillow', 'numpy'], capture_output=True)
+        except Exception: pass
+        self._log("Starting Local Tile Server on port 8000...")
+        try:
             self.server_process = subprocess.Popen([python_cmd, 'server.py'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+            def monitor_server():
+                for line in iter(self.server_process.stdout.readline, ''):
+                    if not self.is_running: break
+                    l = line.strip()
+                    if l: self.root.after(0, lambda log_line=l: self._log(f"[Server] {log_line}"))
+            threading.Thread(target=monitor_server, daemon=True).start()
         except Exception as e: self._log(f"Failed to start server.py: {e}")
         time.sleep(2)
         self.root.after(0, lambda: self.status_dot.config(fg=SUCCESS))
         self.root.after(0, lambda: self.status_lbl.config(text="Local Tile Server Active (http://localhost:8000)"))
         self._log("Local Tile Server running successfully at http://localhost:8000")
-        try:
-            local_url = self.local_url_var.get()
-            self.root.clipboard_clear()
-            self.root.clipboard_append(local_url)
-            self.root.after(0, lambda: self._log("📋 Fast Local Tile URL copied to clipboard automatically!"))
-        except Exception: pass
         self._log("Requesting Cloudflare Tunnel URL...")
         try:
             self.tunnel_process = subprocess.Popen(['npx', 'cloudflared', 'tunnel', '--url', 'http://localhost:8000'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
@@ -256,6 +263,12 @@ class ServerApp:
                     self.tunnel_base_url = found_url
                     self.root.after(0, lambda: self._update_full_url())
                     self.root.after(0, lambda u=found_url: self._log(f"✅ PUBLIC TUNNEL READY: {u}"))
+                    try:
+                        full_url = self.tunnel_url_var.get()
+                        self.root.clipboard_clear()
+                        self.root.clipboard_append(full_url)
+                        self.root.after(0, lambda: self._log("📋 Public Tile URL copied to clipboard automatically!"))
+                    except Exception: pass
         except Exception as e:
             self._log(f"Cloudflare Tunnel Error: {e}")
             self.tunnel_base_url = "http://localhost:8000"

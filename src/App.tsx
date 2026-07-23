@@ -802,47 +802,46 @@ export default function App() {
     // Auto-fetch bounds from tile server if no bounds are specified manually
     let boundsToUse = parsedBounds;
     if (!boundsToUse && (filename || gdrive_id)) {
-      try {
-        const param = filename ? `filename=${encodeURIComponent(filename)}` : `gdrive_id=${gdrive_id}`;
-        let boundsUrl = '';
-        if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
-          const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
-          boundsUrl = `${cleanHost}/api/bounds?${param}`;
-        } else {
-          boundsUrl = getBackendUrl(`/api/bounds?${param}`);
-        }
+      const param = filename ? `filename=${encodeURIComponent(filename)}` : `gdrive_id=${gdrive_id}`;
+      let boundsUrl = '';
+      if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
+        const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+        boundsUrl = `${cleanHost}/api/bounds?${param}`;
+      } else {
+        boundsUrl = getBackendUrl(`/api/bounds?${param}`);
+      }
 
-        const response = await fetch(boundsUrl);
-        if (response.ok) {
-          const data = await response.json();
-          const b = data.bounds || data;
-          
-          if (b.south !== undefined && b.west !== undefined && b.north !== undefined && b.east !== undefined) {
-            boundsToUse = [
-              parseFloat(b.south),
-              parseFloat(b.west),
-              parseFloat(b.north),
-              parseFloat(b.east)
-            ];
-          } else if (b.left !== undefined && b.bottom !== undefined && b.right !== undefined && b.top !== undefined) {
-            // localtileserver format: left, bottom, right, top -> [south, west, north, east]
-            boundsToUse = [
-              parseFloat(b.bottom),
-              parseFloat(b.left),
-              parseFloat(b.top),
-              parseFloat(b.right)
-            ];
-          } else if (b.minlat !== undefined && b.minlon !== undefined && b.maxlat !== undefined && b.maxlon !== undefined) {
-            boundsToUse = [
-              parseFloat(b.minlat),
-              parseFloat(b.minlon),
-              parseFloat(b.maxlat),
-              parseFloat(b.maxlon)
-            ];
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const response = await fetch(boundsUrl);
+          if (response.ok) {
+            const data = await response.json();
+            const b = data.bounds || data;
+            
+            if (b.south !== undefined && b.west !== undefined && b.north !== undefined && b.east !== undefined) {
+              boundsToUse = [
+                parseFloat(b.south),
+                parseFloat(b.west),
+                parseFloat(b.north),
+                parseFloat(b.east)
+              ];
+              break;
+            } else if (b.left !== undefined && b.bottom !== undefined && b.right !== undefined && b.top !== undefined) {
+              boundsToUse = [
+                parseFloat(b.bottom),
+                parseFloat(b.left),
+                parseFloat(b.top),
+                parseFloat(b.right)
+              ];
+              break;
+            }
           }
+        } catch (e) {
+          console.warn(`Bounds fetch attempt ${attempt} failed:`, e);
         }
-      } catch (e) {
-        console.warn('Failed to auto-fetch bounds from tile server', e);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 600));
+        }
       }
     }
     

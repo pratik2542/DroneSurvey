@@ -103,23 +103,23 @@ class ServerApp:
         url_inner = tk.Frame(url_box, bg='#090b14', padx=12, pady=10)
         url_inner.pack(fill='x')
 
-        # Local URL Row (Primary - 100% Reliable)
-        tk.Label(url_inner, text='⚡ LOCAL URL (For this PC - Fast & Never Expires):', font=(FONT, 8, 'bold'), bg='#090b14', fg=SUCCESS).pack(anchor='w')
-        local_row = tk.Frame(url_inner, bg='#090b14')
-        local_row.pack(fill='x', pady=(2, 8))
-
-        self.local_url_var = tk.StringVar(value='http://localhost:8000/api/tiles/{z}/{x}/{y}.png')
-        tk.Entry(local_row, textvariable=self.local_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=SUCCESS, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
-        tk.Button(local_row, text='📋 Copy Local URL', command=self._copy_local_url, font=(FONT, 8, 'bold'), bg=SUCCESS, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
-
-        # Public Tunnel URL Row (Secondary - For Remote Share)
-        tk.Label(url_inner, text='🌐 PUBLIC TUNNEL URL (For Sharing across Internet):', font=(FONT, 8, 'bold'), bg='#090b14', fg=ACCENT).pack(anchor='w')
+        # Public Tunnel URL Row (Primary for Live Web App over HTTPS)
+        tk.Label(url_inner, text='🌐 PUBLIC TUNNEL URL (For Live Web App - HTTPS Compatible):', font=(FONT, 8, 'bold'), bg='#090b14', fg=SUCCESS).pack(anchor='w')
         tunnel_row = tk.Frame(url_inner, bg='#090b14')
-        tunnel_row.pack(fill='x', pady=(2, 6))
+        tunnel_row.pack(fill='x', pady=(2, 8))
 
         self.tunnel_url_var = tk.StringVar(value='Generating Cloudflare Tunnel link...')
-        tk.Entry(tunnel_row, textvariable=self.tunnel_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=ACCENT, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
-        tk.Button(tunnel_row, text='📋 Copy Public URL', command=self._copy_tunnel_url, font=(FONT, 8, 'bold'), bg=ACCENT, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
+        tk.Entry(tunnel_row, textvariable=self.tunnel_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=SUCCESS, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
+        tk.Button(tunnel_row, text='📋 Copy Public URL', command=self._copy_tunnel_url, font=(FONT, 8, 'bold'), bg=SUCCESS, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
+
+        # Local URL Row (Secondary for Local HTTP testing)
+        tk.Label(url_inner, text='⚡ LOCAL URL (For local http://localhost dev testing):', font=(FONT, 8, 'bold'), bg='#090b14', fg=ACCENT).pack(anchor='w')
+        local_row = tk.Frame(url_inner, bg='#090b14')
+        local_row.pack(fill='x', pady=(2, 6))
+
+        self.local_url_var = tk.StringVar(value='http://localhost:8000/api/tiles/{z}/{x}/{y}.png')
+        tk.Entry(local_row, textvariable=self.local_url_var, font=('Consolas', 8, 'bold'), bg='#141724', fg=ACCENT, relief='flat', state='readonly').pack(side='left', fill='x', expand=True, padx=(0, 8))
+        tk.Button(local_row, text='📋 Copy Local URL', command=self._copy_local_url, font=(FONT, 8, 'bold'), bg=ACCENT, fg='#000000', relief='flat', padx=10, pady=3, cursor='hand2').pack(side='right')
 
         btn_row = tk.Frame(card, bg=CARD)
         btn_row.pack(fill='x', padx=14, pady=(0, 8))
@@ -187,7 +187,7 @@ class ServerApp:
         url = self.local_url_var.get()
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
-        messagebox.showinfo('Copied Local URL!', f'Local Tile URL copied to clipboard!\n\n{url}\n\nPaste under CONNECT TILE SERVER in the web app. Works 100% reliably on this PC!')
+        messagebox.showinfo('Copied Local URL!', f'Local Tile URL copied to clipboard!\n\n{url}\n\nNote: For HTTP local dev testing only.')
 
     def _copy_tunnel_url(self):
         url = self.tunnel_url_var.get()
@@ -196,7 +196,7 @@ class ServerApp:
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
-        messagebox.showinfo('Copied Public Tunnel URL!', f'Public Tunnel URL copied to clipboard!\n\n{url}\n\nShare this link with remote users anywhere in the world!')
+        messagebox.showinfo('Copied Public Tunnel URL!', f'Public Tunnel URL copied to clipboard!\n\n{url}\n\nPaste under CONNECT TILE SERVER in the web app!')
 
     def _open_web_app(self):
         webbrowser.open(WEB_APP_URL)
@@ -205,9 +205,21 @@ class ServerApp:
         threading.Thread(target=self._run_server_and_tunnel, daemon=True).start()
 
     def _run_server_and_tunnel(self):
-        self._log("Starting Local Tile Server on port 8000...")
+        self._log("Checking Python dependencies (flask, rasterio, Pillow, numpy)...")
         python_cmd = sys.executable or 'python'
         
+        # Verify rasterio & flask import
+        try:
+            check_code = "import flask, rasterio, PIL, numpy; print('DEPS_OK')"
+            res = subprocess.run([python_cmd, '-c', check_code], capture_output=True, text=True)
+            if 'DEPS_OK' not in res.stdout:
+                self._log("Installing required Python GIS libraries (rasterio, Pillow, numpy, flask)...")
+                subprocess.run([python_cmd, '-m', 'pip', 'install', 'flask', 'rasterio', 'Pillow', 'numpy'], capture_output=True)
+                self._log("Dependencies installed successfully!")
+        except Exception as dep_err:
+            self._log(f"Dependency warning: {dep_err}")
+
+        self._log("Starting Local Tile Server on port 8000...")
         try:
             self.server_process = subprocess.Popen(
                 [python_cmd, 'server.py'],
@@ -217,23 +229,41 @@ class ServerApp:
                 encoding='utf-8',
                 errors='replace'
             )
+
+            # Monitor server.py output in background thread
+            def monitor_server():
+                for line in iter(self.server_process.stdout.readline, ''):
+                    if not self.is_running:
+                        break
+                    l = line.strip()
+                    if l:
+                        self.root.after(0, lambda log_line=l: self._log(f"[Server] {log_line}"))
+
+            threading.Thread(target=monitor_server, daemon=True).start()
+
         except Exception as e:
             self._log(f"Failed to start server.py: {e}")
 
-        time.sleep(2)
-        
-        self.root.after(0, lambda: self.status_dot.config(fg=SUCCESS))
-        self.root.after(0, lambda: self.status_lbl.config(text="Local Tile Server Active (http://localhost:8000)"))
-        self._log("Local Tile Server running successfully at http://localhost:8000")
+        # Wait for server to respond on /health
+        server_ready = False
+        for _ in range(10):
+            try:
+                import urllib.request
+                req = urllib.request.urlopen('http://localhost:8000/health', timeout=1)
+                if req.status == 200:
+                    server_ready = True
+                    break
+            except Exception:
+                time.sleep(0.5)
 
-        # Auto-copy local URL to clipboard first for instant local testing
-        try:
-            local_url = self.local_url_var.get()
-            self.root.clipboard_clear()
-            self.root.clipboard_append(local_url)
-            self.root.after(0, lambda: self._log("📋 Fast Local Tile URL copied to clipboard automatically!"))
-        except Exception:
-            pass
+        if server_ready:
+            self.root.after(0, lambda: self.status_dot.config(fg=SUCCESS))
+            self.root.after(0, lambda: self.status_lbl.config(text="Local Tile Server Active (http://localhost:8000)"))
+            self._log("Local Tile Server running successfully at http://localhost:8000")
+        else:
+            self.root.after(0, lambda: self.status_dot.config(fg=WARNING))
+            self.root.after(0, lambda: self.status_lbl.config(text="Local Tile Server starting..."))
+            self._log("Local Tile Server initializing...")
 
         self._log("Requesting Cloudflare Tunnel URL...")
         try:
@@ -259,10 +289,17 @@ class ServerApp:
                     self.tunnel_base_url = found_url
                     self.root.after(0, lambda: self._update_full_url())
                     self.root.after(0, lambda u=found_url: self._log(f"✅ PUBLIC TUNNEL READY: {u}"))
+                    
+                    # Auto-copy Public Tunnel URL to clipboard
+                    try:
+                        full_url = self.tunnel_url_var.get()
+                        self.root.clipboard_clear()
+                        self.root.clipboard_append(full_url)
+                        self.root.after(0, lambda: self._log("📋 Public Tile URL copied to clipboard automatically!"))
+                    except Exception:
+                        pass
         except Exception as e:
             self._log(f"Cloudflare Tunnel Error: {e}")
-            self.tunnel_base_url = "http://localhost:8000"
-            self.root.after(0, lambda: self._update_full_url())
 
     def _on_close(self):
         self.is_running = False
