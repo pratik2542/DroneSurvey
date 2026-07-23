@@ -755,35 +755,48 @@ export default function App() {
     let gdrive_id = '';
     let host = '';
 
-    // Auto-detect and rewrite main page localtileserver URLs to Leaflet XYZ template format
-    try {
-      const urlObj = new URL(urlStr);
-      filename = urlObj.searchParams.get('filename') || '';
-      gdrive_id = urlObj.searchParams.get('gdrive_id') || '';
-      host = urlObj.origin;
-      
-      if (host && (host.startsWith('http://') || host.startsWith('https://'))) {
-        const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
-        localStorage.setItem('connected_tile_host', cleanHost);
-      }
+    // Robust URL & parameters parser (handles template braces {z}/{x}/{y} and unescaped Windows paths)
+    const hostMatch = urlStr.match(/^(https?:\/\/[^\/\s?#]+)/i);
+    if (hostMatch) {
+      host = hostMatch[1];
+      const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
+      localStorage.setItem('connected_tile_host', cleanHost);
+    }
 
-      if (!urlStr.includes('{z}') && !urlStr.includes('{x}') && !urlStr.includes('{y}')) {
-        const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
-        if (filename) {
-          urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
-        } else {
-          urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png${urlObj.search}`;
-        }
+    const filenameMatch = urlStr.match(/[?&]filename=([^&]+)/i);
+    if (filenameMatch) {
+      try {
+        filename = decodeURIComponent(filenameMatch[1]);
+      } catch (e) {
+        filename = filenameMatch[1];
       }
+    }
 
-      // Only rewrite trycloudflare to http://localhost:8000 if the current web app is NOT running on HTTPS (prevents Mixed Content blocking)
-      if (window.location.protocol !== 'https:' && isServerConnected && urlStr.includes('trycloudflare.com')) {
-        const localHostUrl = urlStr.replace(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/, 'http://localhost:8000');
-        urlStr = localHostUrl;
-        host = 'http://localhost:8000';
+    const gdriveMatch = urlStr.match(/[?&]gdrive_id=([^&]+)/i);
+    if (gdriveMatch) {
+      try {
+        gdrive_id = decodeURIComponent(gdriveMatch[1]);
+      } catch (e) {
+        gdrive_id = gdriveMatch[1];
       }
-    } catch (e) {
-      console.warn('Failed to parse URL template', e);
+    }
+
+    // Auto-append Leaflet XYZ tile template if missing
+    if (!urlStr.includes('{z}') && !urlStr.includes('{x}') && !urlStr.includes('{y}')) {
+      const cleanHost = host ? (host.endsWith('/') ? host.slice(0, -1) : host) : '';
+      if (filename) {
+        urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png?filename=${encodeURIComponent(filename)}`;
+      } else if (gdrive_id) {
+        urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png?gdrive_id=${gdrive_id}`;
+      } else if (cleanHost) {
+        urlStr = `${cleanHost}/api/tiles/{z}/{x}/{y}.png`;
+      }
+    }
+
+    // Only rewrite trycloudflare to http://localhost:8000 if the current web app is NOT running on HTTPS
+    if (window.location.protocol !== 'https:' && isServerConnected && urlStr.includes('trycloudflare.com')) {
+      urlStr = urlStr.replace(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/i, 'http://localhost:8000');
+      host = 'http://localhost:8000';
     }
 
     // Auto-fetch bounds from tile server if no bounds are specified manually
