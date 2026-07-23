@@ -5,6 +5,7 @@ import uuid
 import json
 import requests
 import threading
+import urllib.parse
 
 # Limit GDAL internal cache to prevent OOM on large file processing.
 # Must be set before rasterio is imported anywhere.
